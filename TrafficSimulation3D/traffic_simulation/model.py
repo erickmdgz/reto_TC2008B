@@ -1,0 +1,157 @@
+from mesa import Model
+from mesa.datacollection import DataCollector
+from mesa.discrete_space import OrthogonalMooreGrid
+from .agent import Car, Traffic_Light, Destination, Obstacle, Road
+import json
+
+class CityModel(Model):
+    """
+    Creates a model based on a city map with automatic car spawning.
+    Estructura de trafficBase.CityModel y roombaSimulation2.RoombaMultiAgentModel
+    """
+
+    def __init__(self, seed=42):
+        super().__init__(seed=seed)
+
+        # Load the map dictionary
+        dataDictionary = json.load(open("city_files/mapDictionary.json"))
+
+        self.traffic_lights = []
+        self.destinations = []
+        self.spawn_points = []
+        self.cars = []
+        self.steps_count = 0
+        self.cars_spawned = 0
+        self.cars_reached_destination = 0
+        self.spawn_interval = 10  # Spawn a car every 10 steps
+
+        # Load the map file
+        with open("city_files/2024_base.txt") as baseFile:
+            lines = baseFile.readlines()
+            # Strip whitespace from lines
+            lines = [line.strip() for line in lines if line.strip()]
+            self.width = len(lines[0])
+            self.height = len(lines)
+
+            self.grid = OrthogonalMooreGrid(
+                [self.width, self.height], capacity=100, torus=False, random=self.random
+            )
+
+            # Create the agents based on the map
+            for r, row in enumerate(lines):
+                for c, col in enumerate(row):
+                    cell = self.grid[(c, self.height - r - 1)]
+
+                    if col in ["v", "^", ">", "<"]:
+                        agent = Road(self, cell, dataDictionary[col])
+                        # Check if this is a spawn point (edge of the map)
+                        if self.is_spawn_point(c, self.height - r - 1, dataDictionary[col]):
+                            self.spawn_points.append(cell)
+
+                    elif col in ["S", "s"]:
+                        agent = Traffic_Light(
+                            self,
+                            cell,
+                            False if col == "S" else True,
+                            int(dataDictionary[col]),
+                        )
+                        self.traffic_lights.append(agent)
+
+                    elif col == "#":
+                        agent = Obstacle(self, cell)
+
+                    elif col == "D":
+                        agent = Destination(self, cell)
+                        self.destinations.append(cell)
+
+        # Set up data collection
+        model_reporters = {
+            "Cars": lambda m: len(m.cars),
+            "Cars Spawned": lambda m: m.cars_spawned,
+            "Cars at Destination": lambda m: m.cars_reached_destination,
+        }
+
+        self.datacollector = DataCollector(model_reporters)
+        self.running = True
+        self.datacollector.collect(self)
+
+    def is_spawn_point(self, x, y, direction):
+        """
+        Determines if a road cell is a spawn point (at the edge of the map).
+        """
+        # Check if the cell is at the edge based on direction
+        if direction == "Right" and x == 0:
+            return True
+        if direction == "Left" and x == self.width - 1:
+            return True
+        if direction == "Up" and y == 0:
+            return True
+        if direction == "Down" and y == self.height - 1:
+            return True
+        return False
+
+    def spawn_car(self):
+        """
+        Spawns a new car at a random spawn point with a random destination.
+        Patrón de roombaSimulation2 para crear agentes
+        """
+        if not self.spawn_points or not self.destinations:
+            return None
+
+        # Select a random spawn point
+        spawn_cell = self.random.choice(self.spawn_points)
+
+        # Check if spawn point is occupied
+        has_car = any(isinstance(agent, Car) for agent in spawn_cell.agents)
+        if has_car:
+            return None
+
+        # Select a random destination
+        destination_cell = self.random.choice(self.destinations)
+
+        # Create the car
+        car = Car(self, spawn_cell, destination_cell)
+        self.cars.append(car)
+        self.cars_spawned += 1
+
+        return car
+
+    def can_spawn_more_cars(self):
+        """
+        Checks if more cars can be spawned (if there are available spawn points).
+        """
+        for spawn_cell in self.spawn_points:
+            has_car = any(isinstance(agent, Car) for agent in spawn_cell.agents)
+            if not has_car:
+                return True
+        return False
+
+    def step(self):
+        """
+        Advance the model by one step.
+        Estructura de roombaSimulation2.RoombaMultiAgentModel.step()
+        """
+        self.steps_count += 1
+
+        # Spawn a new car every spawn_interval steps
+        if self.steps_count % self.spawn_interval == 0:
+            self.spawn_car()
+
+        # Execute the step for all agents
+        # Patrón de roombaSimulation2 para ejecutar agentes en orden aleatorio
+        agents_list = list(self.agents)
+        self.random.shuffle(agents_list)
+        for agent in agents_list:
+            agent.step()
+
+        # Remove cars that reached their destination
+        # Patrón de roombaSimulation2 para actualizar listas de agentes
+        self.cars = [car for car in self.cars if car in self.agents]
+        self.cars_reached_destination = self.cars_spawned - len(self.cars)
+
+        # Stop if no more cars can be spawned and all cars have reached destination
+        if not self.can_spawn_more_cars() and len(self.cars) == 0:
+            self.running = False
+
+        # Collect data
+        self.datacollector.collect(self)

@@ -1,0 +1,18 @@
+{
+  "name": "traffic-3d-simulation",
+  "version": "1.0.0",
+  "description": "Traffic simulation with 3D visualization using WebGL",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "lil-gui": "^0.19.2",
+    "twgl.js": "^5.5.4"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}
