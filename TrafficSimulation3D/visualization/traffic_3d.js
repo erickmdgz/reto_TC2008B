@@ -292,6 +292,8 @@ async function drawScene() {
     gl.disable(gl.CULL_FACE);
     gl.enable(gl.DEPTH_TEST);
 
+    // Actualizar follow mode antes de checkear keys
+    scene.camera.updateFollowMode();
     scene.camera.checkKeys();
     const viewProjectionMatrix = setupViewProjection(gl);
 
@@ -328,6 +330,39 @@ async function drawScene() {
     }
 
     // Ya no animamos el coche de prueba porque lo quitamos
+
+    // Actualizar dropdown de coches disponibles
+    if (window.carIdController && cars.length > 0) {
+        const currentCarIds = cars.map(c => c.id);
+        const dropdownOptions = ['None', ...currentCarIds];
+
+        // Solo actualizar si cambio el numero de coches
+        if (!window.lastCarCount || window.lastCarCount !== cars.length) {
+            // Destruir el controller viejo
+            window.carIdController.destroy();
+
+            // Crear uno nuevo con las opciones actualizadas
+            const cameraFolder = window.carIdController.parent;
+            window.carIdController = cameraFolder.add(window.cameraControls, 'carId', dropdownOptions)
+                .name('Car ID')
+                .onChange((carId) => {
+                    if (carId === 'None') {
+                        scene.camera.followTarget = null;
+                        scene.camera.followMode = false;
+                        window.cameraControls.followMode = false;
+                    } else {
+                        const car = cars.find(c => c.id === carId);
+                        if (car) {
+                            scene.camera.followTarget = car;
+                            scene.camera.followMode = true;
+                            window.cameraControls.followMode = true;
+                        }
+                    }
+                });
+
+            window.lastCarCount = cars.length;
+        }
+    }
 
     // Dibujar todos los coches
     // Esto dibuja cada coche usando su modelo 3D o cubo
@@ -403,6 +438,63 @@ function setupUI() {
     lightFolder.addColor(scene.lights[0], 'ambient')
     lightFolder.addColor(scene.lights[0], 'diffuse')
     lightFolder.addColor(scene.lights[0], 'specular')
+
+    // Camera follow controls
+    const cameraFolder = gui.addFolder('Camera Follow:')
+
+    // Objeto para controlar el GUI
+    const cameraControls = {
+        followMode: false,
+        carId: 'None',
+        followDistance: 15,
+        followHeight: 8
+    };
+
+    // Toggle follow mode
+    cameraFolder.add(cameraControls, 'followMode')
+        .name('Follow Mode')
+        .onChange((value) => {
+            scene.camera.followMode = value;
+            if (!value) {
+                scene.camera.followTarget = null;
+            }
+        });
+
+    // Dropdown para seleccionar coche (se actualizara dinamicamente)
+    const carIdController = cameraFolder.add(cameraControls, 'carId', ['None'])
+        .name('Car ID')
+        .onChange((carId) => {
+            if (carId === 'None') {
+                scene.camera.followTarget = null;
+                scene.camera.followMode = false;
+                cameraControls.followMode = false;
+            } else {
+                // Buscar el coche por ID
+                const car = cars.find(c => c.id === carId);
+                if (car) {
+                    scene.camera.followTarget = car;
+                    scene.camera.followMode = true;
+                    cameraControls.followMode = true;
+                }
+            }
+        });
+
+    // Controles de distancia y altura
+    cameraFolder.add(cameraControls, 'followDistance', 5, 30)
+        .name('Distance')
+        .onChange((value) => {
+            scene.camera.followDistance = value;
+        });
+
+    cameraFolder.add(cameraControls, 'followHeight', 2, 15)
+        .name('Height')
+        .onChange((value) => {
+            scene.camera.followHeight = value;
+        });
+
+    // Guardar referencia para actualizar el dropdown
+    window.carIdController = carIdController;
+    window.cameraControls = cameraControls;
 }
 
 main();

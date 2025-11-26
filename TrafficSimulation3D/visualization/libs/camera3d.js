@@ -51,6 +51,12 @@ class Camera3D {
 
         // Object to store pressed keys
         this.keysPressed = {};
+
+        // Follow mode variables
+        this.followMode = false;
+        this.followTarget = null; // Objeto a seguir (coche)
+        this.followDistance = 15; // Distancia desde el coche
+        this.followHeight = 8;    // Altura sobre el coche
     }
 
     // Return the current position of the camera as an array of 3 floats
@@ -117,7 +123,55 @@ class Camera3D {
         });
     }
 
+    // Actualizar la camara en modo follow
+    updateFollowMode() {
+        if (this.followMode && this.followTarget) {
+            // Obtener posicion del objeto a seguir
+            const targetPos = this.followTarget.posArray;
+
+            // Actualizar el target de la camara a la posicion del coche
+            this.target.x = targetPos[0];
+            this.target.y = targetPos[1];
+            this.target.z = targetPos[2];
+
+            // Resetear el pan offset para que siga limpiamente
+            this.panOffset = [0, 0, 0];
+
+            // Ajustar distancia y elevacion para vista top-down (desde arriba)
+            this.distance = this.followDistance;
+            this.elevation = Math.PI / 2 - 0.1; // Casi 90 grados (vista desde arriba)
+        }
+    }
+
     checkKeys() {
+        // Si estamos en follow mode, no permitir panning (solo rotacion y zoom)
+        if (this.followMode) {
+            // Rotation permitida
+            if (this.keysPressed['ArrowLeft']) {
+                this.rotate(-1, 0);
+            }
+            if (this.keysPressed['ArrowRight']) {
+                this.rotate(1, 0);
+            }
+            if (this.keysPressed['ArrowUp']) {
+                this.rotate(0, 1);
+            }
+            if (this.keysPressed['ArrowDown']) {
+                this.rotate(0, -1);
+            }
+
+            // Zoom permitido
+            if (this.keysPressed['+'] || this.keysPressed['=']) {
+                this.followDistance = Math.max(5, this.followDistance - 1);
+            }
+            if (this.keysPressed['-'] || this.keysPressed['_']) {
+                this.followDistance = Math.min(30, this.followDistance + 1);
+            }
+
+            return; // No procesar controles normales
+        }
+
+        // Controles normales cuando no esta en follow mode
         // Rotation
         if (this.keysPressed['ArrowLeft']) {
             this.rotate(-1, 0);
