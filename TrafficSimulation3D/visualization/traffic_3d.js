@@ -446,8 +446,7 @@ function setupUI() {
     const cameraControls = {
         followMode: false,
         carId: 'None',
-        followDistance: 15,
-        followHeight: 8
+        followDistance: 15
     };
 
     // Toggle follow mode
@@ -479,17 +478,11 @@ function setupUI() {
             }
         });
 
-    // Controles de distancia y altura
+    // Control de distancia
     cameraFolder.add(cameraControls, 'followDistance', 5, 30)
         .name('Distance')
         .onChange((value) => {
             scene.camera.followDistance = value;
-        });
-
-    cameraFolder.add(cameraControls, 'followHeight', 2, 15)
-        .name('Height')
-        .onChange((value) => {
-            scene.camera.followHeight = value;
         });
 
     // Guardar referencia para actualizar el dropdown

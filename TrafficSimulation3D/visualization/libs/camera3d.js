@@ -56,7 +56,6 @@ class Camera3D {
         this.followMode = false;
         this.followTarget = null; // Objeto a seguir (coche)
         this.followDistance = 15; // Distancia desde el coche
-        this.followHeight = 8;    // Altura sobre el coche
     }
 
     // Return the current position of the camera as an array of 3 floats
