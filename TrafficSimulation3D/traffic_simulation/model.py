@@ -111,6 +111,12 @@ class CityModel(Model):
 
         # Create the car
         car = Car(self, spawn_cell, destination_cell)
+
+        # Inicializar la direccion del coche basado en la calle donde spawneo
+        road = car.get_road_at(spawn_cell)
+        if road:
+            car.direction = road.direction
+
         self.cars.append(car)
         self.cars_spawned += 1
 

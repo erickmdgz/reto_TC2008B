@@ -39,6 +39,12 @@ let then = 0;
 // Patrón de AgentsVisualization para compartir VAO
 let baseCubeRef = null;
 
+// Car model reference
+let carModelRef = null;
+
+// Test car reference para animarlo
+let testCarRef = null;
+
 // Main function is async to make API requests
 async function main() {
     // Setup the canvas area
@@ -62,6 +68,9 @@ async function main() {
     // Get initial cars
     await getCars();
 
+    // Load car model
+    await loadCarModel(gl, phongProgramInfo);
+
     // Initialize the scene
     setupScene();
 
@@ -73,6 +82,37 @@ async function main() {
 
     // First call to the drawing loop
     drawScene();
+}
+
+// Cargar el modelo 3D del coche desde el archivo OBJ
+async function loadCarModel(gl, programInfo) {
+    try {
+        // Hacer fetch del archivo OBJ desde la carpeta public
+        // Vite sirve automaticamente los archivos de public/ desde la raiz
+        // Usando coche_ciudadano.obj que es el coche normal
+        const response = await fetch('/car_files/coche_ciudadano.obj');
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const objText = await response.text();
+
+        console.log('Archivo cargado, primeras 200 caracteres:');
+        console.log(objText.substring(0, 200));
+        console.log('Tamaño del archivo:', objText.length, 'caracteres');
+
+        // Crear un objeto 3D con el modelo cargado
+        // Este objeto se usara como referencia para todos los coches
+        carModelRef = new Object3D(-2);
+        carModelRef.prepareVAO(gl, programInfo, objText);
+
+        console.log('Modelo de coche cargado exitosamente');
+    } catch (error) {
+        console.error('Error cargando modelo de coche:', error);
+        console.log('Usando modelo de cubo como alternativa');
+        // Si falla la carga carModelRef quedara null y los coches usaran cubos
+    }
 }
 
 function setupScene() {
@@ -104,6 +144,8 @@ function setupObjects(scene, gl, programInfo) {
     const baseCube = new Object3D(-1);
     baseCube.prepareVAO(gl, programInfo);
     baseCubeRef = baseCube;
+
+    // Ya no creamos coche de prueba porque el modelo funciona correctamente
 
     // Setup roads (gray ground)
     for (const road of roads) {
@@ -146,33 +188,48 @@ function setupObjects(scene, gl, programInfo) {
         scene.addObject(light);
     }
 
-    // Setup cars (will be added dynamically)
-    // Patrón de AgentsVisualization.random_agents.setupObjects()
+    // Configurar coches que se agregaran dinamicamente
+    // Al inicio puede que no haya coches pero se iran agregando durante la simulacion
     for (const car of cars) {
-        car.arrays = baseCube.arrays;
-        car.bufferInfo = baseCube.bufferInfo;
-        car.vao = baseCube.vao;
-        car.scale = { x: 0.6, y: 0.4, z: 0.4 };
+        // Usar el modelo de coche si se cargo correctamente sino usar un cubo
+        if (carModelRef) {
+            car.arrays = carModelRef.arrays;
+            car.bufferInfo = carModelRef.bufferInfo;
+            car.vao = carModelRef.vao;
+            car.scale = { x: 0.5, y: 0.5, z: 0.5 }; // Escala ajustada para el modelo 3D
+        } else {
+            car.arrays = baseCube.arrays;
+            car.bufferInfo = baseCube.bufferInfo;
+            car.vao = baseCube.vao;
+            car.scale = { x: 0.6, y: 0.4, z: 0.4 };
+        }
+        // Cada coche tiene un color aleatorio para distinguirlos
         car.color = [Math.random(), Math.random(), Math.random(), 1.0];
         scene.addObject(car);
     }
 }
 
-// Draw an object with its corresponding transformations
+// Dibujar un objeto con sus transformaciones correspondientes
 function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
-    // Prepare the vector for translation and scale
-    // Patrón de CG-2025.base_lighting.drawObject()
+    // Verificar que el objeto tenga datos validos antes de dibujarlo
+    // Esto previene errores cuando un objeto no se ha inicializado completamente
+    if (!object.vao || !object.bufferInfo) {
+        return;
+    }
+
+    // Preparar los vectores para traslacion y escala
     let v3_tra = object.posArray;
     let v3_sca = object.scaArray;
 
-    // Create the individual transform matrices
+    // Crear las matrices de transformacion individuales
     const scaMat = M4.scale(v3_sca);
     const rotXMat = M4.rotationX(object.rotRad.x);
     const rotYMat = M4.rotationY(object.rotRad.y);
     const rotZMat = M4.rotationZ(object.rotRad.z);
     const traMat = M4.translation(v3_tra);
 
-    // Create the composite matrix with all transformations
+    // Crear la matriz compuesta con todas las transformaciones
+    // Se aplican en orden escala rotacion traslacion
     let transforms = M4.identity();
     transforms = M4.multiply(scaMat, transforms);
     transforms = M4.multiply(rotXMat, transforms);
@@ -182,14 +239,15 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
 
     object.matrix = transforms;
 
-    // Apply the projection to the final matrix
+    // Aplicar la proyeccion a la matriz final
     const wvpMat = M4.multiply(viewProjectionMatrix, transforms);
 
-    // The matrix for normal transformations
+    // La matriz para transformaciones de normales
+    // Necesaria para que la iluminacion funcione correctamente
     const normalMat = M4.transpose(M4.inverse(object.matrix));
 
-    // Model uniforms
-    // Patrón de CG-2025.base_lighting para uniforms de Phong
+    // Uniforms del modelo para el shader de Phong
+    // Estos valores se pasan al shader para calcular la iluminacion
     let objectUniforms = {
         u_transforms: wvpMat,
         u_modelMatrix: object.matrix,
@@ -204,14 +262,14 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
     }
     twgl.setUniforms(programInfo, objectUniforms);
 
+    // Dibujar el objeto usando su VAO y buffer info
     gl.bindVertexArray(object.vao);
     twgl.drawBufferInfo(gl, object.bufferInfo);
 }
 
-// Draw a car
-// Patrón de AgentsVisualization.random_agents para dibujar agentes
+// Dibujar un coche con su modelo 3D
 function drawCar(gl, programInfo, car, viewProjectionMatrix, fract) {
-    // Draw car body
+    // Dibujar el cuerpo del coche usando el modelo 3D cargado
     drawObject(gl, programInfo, car, viewProjectionMatrix, fract);
 }
 
@@ -229,8 +287,9 @@ async function drawScene() {
     gl.clearColor(0.1, 0.1, 0.15, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-    // Enable face culling and depth testing
-    gl.enable(gl.CULL_FACE);
+    // Deshabilitar face culling para ver ambos lados de las caras
+    // Esto muestra las caras desde ambos lados y arregla las "paredes" raras
+    gl.disable(gl.CULL_FACE);
     gl.enable(gl.DEPTH_TEST);
 
     scene.camera.checkKeys();
@@ -261,19 +320,38 @@ async function drawScene() {
         drawObject(gl, phongProgramInfo, object, viewProjectionMatrix, fract);
     }
 
-    // Draw cars with wheels
+    // Debug: contar cuantos objetos hay en la escena solo la primera vez
+    if (!window.debugLogged) {
+        console.log('Total objetos en escena:', scene.objects.length);
+        console.log('Coches de la API:', cars.length);
+        window.debugLogged = true;
+    }
+
+    // Ya no animamos el coche de prueba porque lo quitamos
+
+    // Dibujar todos los coches
+    // Esto dibuja cada coche usando su modelo 3D o cubo
     for (const car of cars) {
         drawCar(gl, phongProgramInfo, car, viewProjectionMatrix, fract);
     }
 
-    // Add new cars to scene if they don't exist
-    // Patrón de AgentsVisualization para agregar agentes dinámicamente
+    // Agregar coches nuevos a la escena si no existen ya
+    // Esto maneja coches que aparecen durante la simulacion
     for (const car of cars) {
         if (!scene.objects.includes(car)) {
-            car.arrays = baseCubeRef.arrays;
-            car.bufferInfo = baseCubeRef.bufferInfo;
-            car.vao = baseCubeRef.vao;
-            car.scale = { x: 0.6, y: 0.4, z: 0.4 };
+            // Usar el modelo de coche si se cargo correctamente sino usar un cubo
+            if (carModelRef) {
+                car.arrays = carModelRef.arrays;
+                car.bufferInfo = carModelRef.bufferInfo;
+                car.vao = carModelRef.vao;
+                car.scale = { x: 0.5, y: 0.5, z: 0.5 };
+            } else {
+                car.arrays = baseCubeRef.arrays;
+                car.bufferInfo = baseCubeRef.bufferInfo;
+                car.vao = baseCubeRef.vao;
+                car.scale = { x: 0.6, y: 0.4, z: 0.4 };
+            }
+            // Color aleatorio para cada coche nuevo
             car.color = [Math.random(), Math.random(), Math.random(), 1.0];
             scene.addObject(car);
         }

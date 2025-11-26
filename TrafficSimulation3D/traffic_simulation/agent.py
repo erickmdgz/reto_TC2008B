@@ -19,6 +19,9 @@ class Car(CellAgent):
         self.path = []
         self.reached_destination = False
         self.waiting_at_light = False
+        # Direccion del coche basada en la calle donde esta
+        # Puede ser: "Up", "Down", "Left", "Right"
+        self.direction = "Right"  # Direccion por defecto
 
     def find_path_to_destination(self):
         """
@@ -138,6 +141,12 @@ class Car(CellAgent):
         if self.path and self.can_move_forward():
             next_cell = self.path.pop(0)
             self.cell = next_cell
+
+            # Actualizar la direccion del coche basado en la calle donde esta
+            current_road = self.get_road_at(self.cell)
+            if current_road:
+                self.direction = current_road.direction
+
             return True
 
         return False

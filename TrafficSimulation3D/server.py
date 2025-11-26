@@ -43,6 +43,14 @@ def getCars():
     global trafficModel
 
     if request.method == 'GET':
+        # Mapeo de direcciones a puntos cardinales
+        direction_map = {
+            "Up": "Norte",
+            "Down": "Sur",
+            "Right": "Este",
+            "Left": "Oeste"
+        }
+
         # Get the positions of the cars
         carPositions = [
             {
@@ -50,7 +58,8 @@ def getCars():
                 "x": float(car.cell.coordinate[0]),
                 "y": 0.5,
                 "z": float(car.cell.coordinate[1]),
-                "waiting": car.waiting_at_light
+                "waiting": car.waiting_at_light,
+                "direction": direction_map.get(car.direction, "Norte")
             }
             for car in trafficModel.cars
         ]
