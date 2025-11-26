@@ -3,33 +3,17 @@
 }
 
 body {
-    background-color: White;
+    background-color: #0a0a0f;
     width: 100vw;
     height: 100vh;
     box-sizing: border-box;
     margin: 0;
+    padding: 0;
     overflow: hidden;
-    display:grid;
-    grid-template-rows: 10vh 1fr;
-    grid-template-columns: 1fr;
-    grid-template-areas:
-      "header"
-      "main";
-    justify-content: center;
-    align-items: center;
-    justify-items: center;
 }
 
 #headerContainer{
-  grid-area: header;
-  background-color: HotPink;
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  display: flex;
-  flex-direction: row;
-  justify-content: center;
-  align-items: center;
+  display: none;
 }
 
 h1{
@@ -37,21 +21,25 @@ h1{
 }
 
 canvas {
-    width: 75vw;
-    height: 75vh;
-    border: 1px solid black;
-    /* width: 600px; */
-    /* height: 600px; */
+    width: 100vw;
+    height: 100vh;
+    display: block;
+    margin: 0;
+    padding: 0;
 }
 
 #canvas {
-  background-color: White;
-  grid-area: main;
+  background-color: #0a0a0f;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
 }
 
 .lil-gui.autoPlace{
-  top: 15vh;
-  right: 5vw;
+  top: 10px;
+  right: 10px;
 }
 
 #backButton {
