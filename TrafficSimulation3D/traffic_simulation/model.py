@@ -1,8 +1,12 @@
 from mesa import Model
 from mesa.datacollection import DataCollector
 from mesa.discrete_space import OrthogonalMooreGrid
-from .agent import Car, Traffic_Light, Destination, Obstacle, Road
+from .agent import Car, Traffic_Light, Destination, Obstacle, Road, Accident
 import json
+
+# Constantes de accidentes
+ACCIDENT_SPAWN_CHANCE = 0.02  # 2% por step
+MAX_CONCURRENT_ACCIDENTS = 3
 
 class CityModel(Model):
     """
@@ -20,6 +24,7 @@ class CityModel(Model):
         self.destinations = []
         self.spawn_points = []
         self.cars = []
+        self.accidents = []  # Lista de accidentes activos
         self.steps_count = 0
         self.cars_spawned = 0
         self.cars_reached_destination = 0
@@ -92,8 +97,8 @@ class CityModel(Model):
 
     def spawn_car(self):
         """
-        Spawns a new car at a random spawn point with a random destination.
-        Patrón de roombaSimulation2 para crear agentes
+        Spawns a new car at a random spawn point with a REACHABLE destination.
+        Intenta hasta 10 destinos aleatorios antes de rendirse.
         """
         if not self.spawn_points or not self.destinations:
             return None
@@ -106,21 +111,25 @@ class CityModel(Model):
         if has_car:
             return None
 
-        # Select a random destination
-        destination_cell = self.random.choice(self.destinations)
+        # Try up to 10 random destinations to find a reachable one
+        for _ in range(10):
+            destination_cell = self.random.choice(self.destinations)
 
-        # Create the car
-        car = Car(self, spawn_cell, destination_cell)
+            # Create car temporarily to test path
+            car = Car(self, spawn_cell, destination_cell)
 
-        # Inicializar la direccion del coche basado en la calle donde spawneo
-        road = car.get_road_at(spawn_cell)
-        if road:
-            car.direction = road.direction
+            # Check if path exists using car's A*
+            if car.find_path_astar():
+                # Path exists - keep this car
+                self.cars.append(car)
+                self.cars_spawned += 1
+                return car
+            else:
+                # No path - remove car and try another destination
+                car.remove()
 
-        self.cars.append(car)
-        self.cars_spawned += 1
-
-        return car
+        # No reachable destination found after 10 attempts
+        return None
 
     def can_spawn_more_cars(self):
         """
@@ -132,12 +141,54 @@ class CityModel(Model):
                 return True
         return False
 
+    def _try_spawn_accident(self):
+        """
+        Intenta generar un accidente aleatorio en una celda de carretera válida.
+        """
+        # No exceder el máximo de accidentes
+        if len(self.accidents) >= MAX_CONCURRENT_ACCIDENTS:
+            return None
+
+        # Probabilidad de spawn
+        if self.random.random() > ACCIDENT_SPAWN_CHANCE:
+            return None
+
+        # Encontrar celdas válidas (carreteras sin obstáculos/accidentes/destinos/semáforos)
+        valid_cells = []
+        for agent in self.agents:
+            if isinstance(agent, Road):
+                cell = agent.cell
+                has_obstacle = any(isinstance(a, (Obstacle, Accident)) for a in cell.agents)
+                has_dest = any(isinstance(a, Destination) for a in cell.agents)
+                has_light = any(isinstance(a, Traffic_Light) for a in cell.agents)
+                has_car = any(isinstance(a, Car) for a in cell.agents)
+
+                if not has_obstacle and not has_dest and not has_light and not has_car:
+                    valid_cells.append(cell)
+
+        if not valid_cells:
+            return None
+
+        # Crear accidente en celda aleatoria
+        cell = self.random.choice(valid_cells)
+        accident = Accident(self, cell)
+        self.accidents.append(accident)
+
+        return accident
+
+    def _cleanup_accidents(self):
+        """Elimina accidentes expirados de la lista de seguimiento."""
+        self.accidents = [a for a in self.accidents if a.is_active]
+
     def step(self):
         """
         Advance the model by one step.
         Estructura de roombaSimulation2.RoombaMultiAgentModel.step()
         """
         self.steps_count += 1
+
+        # Intentar generar accidente aleatorio
+        self._try_spawn_accident()
 
         # Spawn a new car every spawn_interval steps
         if self.steps_count % self.spawn_interval == 0:
@@ -149,6 +200,9 @@ class CityModel(Model):
         self.random.shuffle(agents_list)
         for agent in agents_list:
             agent.step()
+
+        # Limpiar accidentes expirados
+        self._cleanup_accidents()
 
         # Remove cars that reached their destination
         # Patrón de roombaSimulation2 para actualizar listas de agentes
