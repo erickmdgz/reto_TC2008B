@@ -231,11 +231,12 @@ function setupScene() {
 
     // Setup lighting
     // Patrón de CG-2025.base_lighting.setupScene()
+    // Valores reducidos para iluminacion mas suave
     let light = new Light3D(0,
         [15, 20, 15],              // Position
-        [0.3, 0.3, 0.3, 1.0],   // Ambient
-        [1.0, 1.0, 1.0, 1.0],   // Diffuse
-        [1.0, 1.0, 1.0, 1.0]);  // Specular
+        [0.15, 0.15, 0.15, 1.0],   // Ambient (reducido)
+        [0.5, 0.5, 0.5, 1.0],      // Diffuse (reducido)
+        [0.3, 0.3, 0.3, 1.0]);     // Specular (reducido)
     scene.addLight(light);
 }
 
@@ -357,6 +358,59 @@ function setupObjects(scene, gl, programInfo) {
     }
 }
 
+// Preparar arrays de posiciones y colores de semaforos para el shader
+// Maximo 30 semaforos segun el shader
+const MAX_TRAFFIC_LIGHTS = 30;
+const MAX_CARS = 50;
+
+function getTrafficLightUniforms() {
+    const positions = [];
+    const colors = [];
+    const numLights = Math.min(trafficLights.length, MAX_TRAFFIC_LIGHTS);
+
+    for (let i = 0; i < MAX_TRAFFIC_LIGHTS; i++) {
+        if (i < trafficLights.length) {
+            const light = trafficLights[i];
+            positions.push(light.position.x, light.position.y, light.position.z);
+            colors.push(light.color[0], light.color[1], light.color[2], light.color[3]);
+        } else {
+            // Llenar con ceros para los slots no usados
+            positions.push(0, 0, 0);
+            colors.push(0, 0, 0, 0);
+        }
+    }
+
+    return {
+        u_trafficLightPositions: positions,
+        u_trafficLightColors: colors,
+        u_numTrafficLights: numLights
+    };
+}
+
+// Preparar arrays de posiciones de coches para el shader
+// Patron de getTrafficLightUniforms
+function getCarUniforms() {
+    const positions = [];
+    const numCars = Math.min(cars.length, MAX_CARS);
+
+    for (let i = 0; i < MAX_CARS; i++) {
+        if (i < cars.length) {
+            const car = cars[i];
+            // Usar la posicion del coche
+            // Mismo patron que semaforos
+            positions.push(car.position.x, car.position.y, car.position.z);
+        } else {
+            // Llenar con ceros para los slots no usados
+            positions.push(0, 0, 0);
+        }
+    }
+
+    return {
+        u_carPositions: positions,
+        u_numCars: numCars
+    };
+}
+
 // Dibujar un objeto con sus transformaciones correspondientes
 function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
     // Verificar que el objeto tenga datos validos antes de dibujarlo
@@ -394,6 +448,10 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
     // Necesaria para que la iluminacion funcione correctamente
     const normalMat = M4.transpose(M4.inverse(object.matrix));
 
+    // Obtener uniforms de luces de semaforos y coches
+    const trafficLightUniforms = getTrafficLightUniforms();
+    const carUniforms = getCarUniforms();
+
     // Uniforms del modelo para el shader de Phong
     // Estos valores se pasan al shader para calcular la iluminacion
     let objectUniforms = {
@@ -406,7 +464,9 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
         u_lightAmbient: scene.lights[0].ambient,
         u_lightDiffuse: scene.lights[0].diffuse,
         u_lightSpecular: scene.lights[0].specular,
-        u_viewPosition: scene.camera.posArray
+        u_viewPosition: scene.camera.posArray,
+        ...trafficLightUniforms,
+        ...carUniforms
     }
     twgl.setUniforms(programInfo, objectUniforms);
 

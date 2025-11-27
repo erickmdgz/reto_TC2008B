@@ -1,12 +1,14 @@
 #version 300 es
 // Fragment shader for emission (traffic lights)
 // Estructura de CG-2025
+// Los semaforos brillan con su color propio
 precision highp float;
 
 in vec3 v_normal;
 in vec3 v_surfaceToLight;
 in vec3 v_surfaceToView;
 in vec4 v_color;
+in vec3 v_worldPosition;
 
 // Scene uniforms
 uniform vec4 u_lightAmbient;
@@ -28,18 +30,26 @@ void main() {
     // Half vector for specular calculation
     vec3 halfVector = normalize(surfaceToLightDirection + surfaceToViewDirection);
 
-    // Emission component - el color del material brilla por si mismo
-    vec4 emission = u_materialColor * 1.5;
+    // Diffuse component (iluminacion normal)
+    float diffuseLight = max(dot(normal, surfaceToLightDirection), 0.0);
+    vec4 diffuse = u_lightDiffuse * u_materialColor * diffuseLight;
 
-    // Ambient component (reduced for emission effect)
-    vec4 ambient = u_lightAmbient * u_materialColor * 0.3;
+    // Ambient component
+    vec4 ambient = u_lightAmbient * u_materialColor;
 
-    // Specular component for glow effect
-    float specularLight = pow(max(dot(normal, halfVector), 0.0), u_materialShininess);
-    vec4 specular = u_lightSpecular * specularLight * 0.5;
+    // Specular component
+    float specularLight = 0.0;
+    if (diffuseLight > 0.0) {
+        specularLight = pow(max(dot(normal, halfVector), 0.0), u_materialShininess);
+    }
+    vec4 specular = u_lightSpecular * specularLight;
 
-    // Final color with emission glow
-    outColor = emission + ambient + specular;
+    // Brillo propio - el color del material se intensifica ligeramente
+    // No emite luz, solo brilla mas de lo normal
+    vec4 selfGlow = u_materialColor * 0.4;
+
+    // Final color: iluminacion Phong normal + brillo propio sutil
+    outColor = ambient + diffuse + specular + selfGlow;
     outColor = clamp(outColor, 0.0, 1.0);
     outColor.a = u_materialColor.a;
 }
