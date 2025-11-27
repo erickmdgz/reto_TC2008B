@@ -20,6 +20,7 @@ out vec3 v_normal;
 out vec3 v_surfaceToLight;
 out vec3 v_surfaceToView;
 out vec4 v_color;
+out vec3 v_worldPosition;
 
 void main() {
     // Transform the position of the vertices
@@ -36,6 +37,9 @@ void main() {
 
     // Direction from the surface to the view
     v_surfaceToView = u_viewPosition - surfaceWorldPosition;
+
+    // Pass world position
+    v_worldPosition = surfaceWorldPosition;
 
     // Pass vertex color
     v_color = a_color;
