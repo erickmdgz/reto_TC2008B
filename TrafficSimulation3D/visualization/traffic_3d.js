@@ -26,10 +26,15 @@ import {
 import vsGLSL from './assets/shaders/vs_phong_301.glsl?raw';
 import fsGLSL from './assets/shaders/fs_phong_301.glsl?raw';
 
+// Shaders de emision para semaforos
+import vsEmissionGLSL from './assets/shaders/vs_emission_301.glsl?raw';
+import fsEmissionGLSL from './assets/shaders/fs_emission_301.glsl?raw';
+
 const scene = new Scene3D();
 
 // Global variables
 let phongProgramInfo = undefined;
+let emissionProgramInfo = undefined;
 let gl = undefined;
 const duration = 1000; // ms
 let elapsed = 0;
@@ -41,6 +46,13 @@ let baseCubeRef = null;
 
 // Car model reference
 let carModelRef = null;
+
+// Building model references
+// Array de modelos de edificios para asignar aleatoriamente
+let buildingModelRefs = [];
+
+// Traffic light model reference
+let trafficLightModelRef = null;
 
 // Test car reference para animarlo
 let testCarRef = null;
@@ -56,6 +68,9 @@ async function main() {
     // Prepare the program with the shaders
     phongProgramInfo = twgl.createProgramInfo(gl, [vsGLSL, fsGLSL]);
 
+    // Prepare the emission program for traffic lights
+    emissionProgramInfo = twgl.createProgramInfo(gl, [vsEmissionGLSL, fsEmissionGLSL]);
+
     // Initialize the traffic model
     await initTrafficModel();
 
@@ -70,6 +85,12 @@ async function main() {
 
     // Load car model
     await loadCarModel(gl, phongProgramInfo);
+
+    // Load building models
+    await loadBuildingModels(gl, phongProgramInfo);
+
+    // Load traffic light model
+    await loadTrafficLightModel(gl, emissionProgramInfo);
 
     // Initialize the scene
     setupScene();
@@ -115,6 +136,86 @@ async function loadCarModel(gl, programInfo) {
     }
 }
 
+// Cargar los modelos 3D de edificios desde archivos OBJ
+// Patron de loadCarModel adaptado para multiples modelos
+async function loadBuildingModels(gl, programInfo) {
+    // Lista de archivos de edificios generados con BuildingGenerator
+    // Variedad de formas: triangulares, cuadrados, pentagonales, hexagonales, octagonales, cilindricos
+    const buildingFiles = [
+        '/building_files/building_3_2_0.35_0.2.obj',        // Triangular piramide
+        '/building_files/building_4_3_0.4_0.35.obj',        // Cuadrado cono truncado
+        '/building_files/building_4_3_0.45_0.2.obj',        // Cuadrado piramide
+        '/building_files/building_4_4.5_0.3_0.3.obj',       // Cuadrado torre
+        '/building_files/building_5_2.5_0.35_0.3.obj',      // Pentagonal bajo
+        '/building_files/building_5_5_0.25_0.4.obj',        // Pentagonal expandido (mas ancho arriba)
+        '/building_files/building_6_3.5_0.4_0.3.obj',       // Hexagonal cono truncado
+        '/building_files/building_6_4_0.2_0.45.obj',        // Hexagonal invertido (mas ancho arriba)
+        '/building_files/building_8_3.5_0.5_0.15.obj',      // Octagonal cono puntiagudo
+        '/building_files/building_8_4_0.4_0.25.obj',        // Octagonal cono truncado
+        '/building_files/building_12_3_0.4_0.35.obj'        // Cilindrico
+    ];
+
+    for (const file of buildingFiles) {
+        try {
+            // Hacer fetch del archivo OBJ desde la carpeta public
+            // Vite sirve automaticamente los archivos de public/ desde la raiz
+            const response = await fetch(file);
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const objText = await response.text();
+
+            console.log('Edificio cargado:', file);
+            console.log('Tamaño del archivo:', objText.length, 'caracteres');
+
+            // Crear un objeto 3D con el modelo cargado
+            // Este objeto se usara como referencia para edificios
+            const buildingModel = new Object3D(-3 - buildingModelRefs.length);
+            buildingModel.prepareVAO(gl, programInfo, objText);
+
+            buildingModelRefs.push(buildingModel);
+
+            console.log('Modelo de edificio cargado exitosamente:', file);
+        } catch (error) {
+            console.error('Error cargando modelo de edificio:', file, error);
+            // Si falla la carga continuamos con los otros modelos
+        }
+    }
+
+    console.log('Total modelos de edificios cargados:', buildingModelRefs.length);
+}
+
+// Cargar el modelo 3D del semaforo desde el archivo OBJ
+// Patron de loadCarModel
+async function loadTrafficLightModel(gl, programInfo) {
+    try {
+        // Hacer fetch del archivo OBJ desde la carpeta public
+        // Vite sirve automaticamente los archivos de public/ desde la raiz
+        const response = await fetch('/traffic_light_files/traffic_light.obj');
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const objText = await response.text();
+
+        console.log('Semaforo cargado, tamaño:', objText.length, 'caracteres');
+
+        // Crear un objeto 3D con el modelo cargado
+        // Este objeto se usara como referencia para todos los semaforos
+        trafficLightModelRef = new Object3D(-100);
+        trafficLightModelRef.prepareVAO(gl, programInfo, objText);
+
+        console.log('Modelo de semaforo cargado exitosamente');
+    } catch (error) {
+        console.error('Error cargando modelo de semaforo:', error);
+        console.log('Usando modelo de cubo como alternativa');
+        // Si falla la carga trafficLightModelRef quedara null y los semaforos usaran cubos
+    }
+}
+
 function setupScene() {
     // Setup camera
     // Patrón de CG-2025.base_lighting.setupScene()
@@ -148,60 +249,107 @@ function setupObjects(scene, gl, programInfo) {
     // Ya no creamos coche de prueba porque el modelo funciona correctamente
 
     // Setup roads (gray ground)
+    // Escala 0.5 porque el cubo base tiene 2 unidades (de -1 a 1) y las celdas son de 1 unidad
     for (const road of roads) {
         road.arrays = baseCube.arrays;
         road.bufferInfo = baseCube.bufferInfo;
         road.vao = baseCube.vao;
-        road.scale = { x: 1, y: 0.05, z: 1 };
+        road.scale = { x: 0.5, y: 0.025, z: 0.5 };
         road.color = [0.3, 0.3, 0.3, 1.0];  // Gray
         scene.addObject(road);
     }
 
     // Setup destinations (green ground)
+    // Escala 0.5 porque el cubo base tiene 2 unidades (de -1 a 1) y las celdas son de 1 unidad
     for (const dest of destinations) {
         dest.arrays = baseCube.arrays;
         dest.bufferInfo = baseCube.bufferInfo;
         dest.vao = baseCube.vao;
-        dest.scale = { x: 1, y: 0.05, z: 1 };
+        dest.scale = { x: 0.5, y: 0.025, z: 0.5 };
         dest.color = [0.2, 0.8, 0.2, 1.0];  // Green
         scene.addObject(dest);
     }
 
-    // Setup obstacles (buildings - tall cubes)
-    for (const obstacle of obstacles) {
-        obstacle.arrays = baseCube.arrays;
-        obstacle.bufferInfo = baseCube.bufferInfo;
-        obstacle.vao = baseCube.vao;
-        obstacle.scale = { x: 0.9, y: 3, z: 0.9 };
+    // Setup obstacles (buildings - usando modelos OBJ generados)
+    // Escala 0.45 para que ocupen 0.9 unidades (90% de una celda de 1 unidad)
+    for (let i = 0; i < obstacles.length; i++) {
+        const obstacle = obstacles[i];
+
+        // Agregar tile de suelo debajo de cada edificio
+        // Patron de roads para crear suelo consistente
+        const groundTile = new Object3D('ground_' + obstacle.id, obstacle.posArray);
+        groundTile.arrays = baseCube.arrays;
+        groundTile.bufferInfo = baseCube.bufferInfo;
+        groundTile.vao = baseCube.vao;
+        groundTile.scale = { x: 0.5, y: 0.025, z: 0.5 };
+        groundTile.color = [0.25, 0.25, 0.25, 1.0];  // Dark gray for building ground
+        scene.addObject(groundTile);
+
+        // Usar modelo de edificio si se cargo correctamente sino usar cubo
+        if (buildingModelRefs.length > 0) {
+            // Asignar modelo de edificio basado en el indice para variedad
+            const modelIndex = i % buildingModelRefs.length;
+            const buildingModel = buildingModelRefs[modelIndex];
+            obstacle.arrays = buildingModel.arrays;
+            obstacle.bufferInfo = buildingModel.bufferInfo;
+            obstacle.vao = buildingModel.vao;
+            obstacle.scale = { x: 0.45, y: 0.45, z: 0.45 }; // Escala para modelos OBJ
+        } else {
+            obstacle.arrays = baseCube.arrays;
+            obstacle.bufferInfo = baseCube.bufferInfo;
+            obstacle.vao = baseCube.vao;
+            obstacle.scale = { x: 0.45, y: 1.5, z: 0.45 };
+        }
         obstacle.color = [0.6, 0.6, 0.7, 1.0];  // Light gray/blue
         scene.addObject(obstacle);
     }
 
-    // Setup traffic lights (cubes that will change color)
+    // Setup traffic lights (usando modelo OBJ y shader de emision)
     for (const light of trafficLights) {
-        light.arrays = baseCube.arrays;
-        light.bufferInfo = baseCube.bufferInfo;
-        light.vao = baseCube.vao;
-        light.scale = { x: 0.3, y: 0.8, z: 0.3 };
+        // Agregar tile de suelo debajo de cada semaforo
+        // Patron de roads para crear suelo consistente
+        const groundTile = new Object3D('ground_light_' + light.id, [light.position.x, 0, light.position.z]);
+        groundTile.arrays = baseCube.arrays;
+        groundTile.bufferInfo = baseCube.bufferInfo;
+        groundTile.vao = baseCube.vao;
+        groundTile.scale = { x: 0.5, y: 0.025, z: 0.5 };
+        groundTile.color = [0.3, 0.3, 0.3, 1.0];  // Gray like roads
+        scene.addObject(groundTile);
+
+        // Usar modelo de semaforo si se cargo correctamente sino usar cubo
+        if (trafficLightModelRef) {
+            light.arrays = trafficLightModelRef.arrays;
+            light.bufferInfo = trafficLightModelRef.bufferInfo;
+            light.vao = trafficLightModelRef.vao;
+            light.scale = { x: 0.4, y: 0.4, z: 0.4 }; // Escala para modelo OBJ
+        } else {
+            light.arrays = baseCube.arrays;
+            light.bufferInfo = baseCube.bufferInfo;
+            light.vao = baseCube.vao;
+            light.scale = { x: 0.15, y: 0.4, z: 0.15 };
+        }
         // Color will be updated based on state
+        // Marcar como objeto emisivo para usar shader de emision
+        light.isEmissive = true;
         light.color = light.state ? [0.0, 1.0, 0.0, 1.0] : [1.0, 0.0, 0.0, 1.0];
         scene.addObject(light);
     }
 
     // Configurar coches que se agregaran dinamicamente
     // Al inicio puede que no haya coches pero se iran agregando durante la simulacion
+    // Escala 0.25 para mantener proporcion correcta con el cubo base de 2 unidades
     for (const car of cars) {
         // Usar el modelo de coche si se cargo correctamente sino usar un cubo
         if (carModelRef) {
             car.arrays = carModelRef.arrays;
             car.bufferInfo = carModelRef.bufferInfo;
             car.vao = carModelRef.vao;
-            car.scale = { x: 0.5, y: 0.5, z: 0.5 }; // Escala ajustada para el modelo 3D
+            car.scale = { x: 0.25, y: 0.25, z: 0.25 }; // Escala ajustada para el modelo 3D
         } else {
             car.arrays = baseCube.arrays;
             car.bufferInfo = baseCube.bufferInfo;
             car.vao = baseCube.vao;
-            car.scale = { x: 0.6, y: 0.4, z: 0.4 };
+            car.scale = { x: 0.3, y: 0.2, z: 0.2 };
         }
         // Cada coche tiene un color aleatorio para distinguirlos
         car.color = [Math.random(), Math.random(), Math.random(), 1.0];
@@ -313,14 +461,29 @@ async function drawScene() {
         }
     }
 
-    // Draw static objects (roads, destinations, obstacles, traffic lights)
+    // Draw static objects (roads, destinations, obstacles)
+    // Usando shader Phong para objetos normales
     for (let object of scene.objects) {
-        // Skip cars, they will be drawn separately with wheels
+        // Skip cars, they will be drawn separately
         if (cars.includes(object)) {
+            continue;
+        }
+        // Skip traffic lights, they will be drawn with emission shader
+        if (trafficLights.includes(object)) {
             continue;
         }
         drawObject(gl, phongProgramInfo, object, viewProjectionMatrix, fract);
     }
+
+    // Draw traffic lights with emission shader
+    // Usar shader de emision para que los semaforos brillen
+    gl.useProgram(emissionProgramInfo.program);
+    for (const light of trafficLights) {
+        drawObject(gl, emissionProgramInfo, light, viewProjectionMatrix, fract);
+    }
+
+    // Volver al shader Phong para el resto de objetos
+    gl.useProgram(phongProgramInfo.program);
 
     // Debug: contar cuantos objetos hay en la escena solo la primera vez
     if (!window.debugLogged) {
@@ -372,6 +535,7 @@ async function drawScene() {
 
     // Agregar coches nuevos a la escena si no existen ya
     // Esto maneja coches que aparecen durante la simulacion
+    // Escala 0.25 para mantener proporcion correcta con el cubo base de 2 unidades
     for (const car of cars) {
         if (!scene.objects.includes(car)) {
             // Usar el modelo de coche si se cargo correctamente sino usar un cubo
@@ -379,12 +543,12 @@ async function drawScene() {
                 car.arrays = carModelRef.arrays;
                 car.bufferInfo = carModelRef.bufferInfo;
                 car.vao = carModelRef.vao;
-                car.scale = { x: 0.5, y: 0.5, z: 0.5 };
+                car.scale = { x: 0.25, y: 0.25, z: 0.25 };
             } else {
                 car.arrays = baseCubeRef.arrays;
                 car.bufferInfo = baseCubeRef.bufferInfo;
                 car.vao = baseCubeRef.vao;
-                car.scale = { x: 0.6, y: 0.4, z: 0.4 };
+                car.scale = { x: 0.3, y: 0.2, z: 0.2 };
             }
             // Color aleatorio para cada coche nuevo
             car.color = [Math.random(), Math.random(), Math.random(), 1.0];

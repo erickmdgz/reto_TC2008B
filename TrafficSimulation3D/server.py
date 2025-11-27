@@ -52,11 +52,12 @@ def getCars():
         }
 
         # Get the positions of the cars
+        # y=0.25 para que esten sobre las calles (escala corregida del cubo base)
         carPositions = [
             {
                 "id": str(car.unique_id),
                 "x": float(car.cell.coordinate[0]),
-                "y": 0.5,
+                "y": 0.25,
                 "z": float(car.cell.coordinate[1]),
                 "waiting": car.waiting_at_light,
                 "direction": direction_map.get(car.direction, "Norte")
@@ -73,12 +74,12 @@ def getTrafficLights():
 
     if request.method == 'GET':
         # Get the positions and states of traffic lights
-        # y=3.5 para que estén por encima de los edificios
+        # y=0.4 para que esten sobre el suelo (escala 0.4, altura real 0.8, centro en 0.4)
         lightPositions = [
             {
                 "id": str(light.unique_id),
                 "x": float(light.cell.coordinate[0]),
-                "y": 3.5,
+                "y": 0.4,
                 "z": float(light.cell.coordinate[1]),
                 "state": light.state  # True = green, False = red
             }
@@ -100,10 +101,11 @@ def getObstacles():
             x, z = cell.coordinate
             for agent in cell.agents:
                 if isinstance(agent, Obstacle):
+                    # y=0.0 porque los modelos OBJ tienen su base en Y=0
                     obstaclePositions.append({
                         "id": str(agent.unique_id),
                         "x": float(x),
-                        "y": 1.5,
+                        "y": 0.0,
                         "z": float(z)
                     })
 
