@@ -55,10 +55,6 @@ class Car(CellAgent):
 
             current_road = self.get_road_at(current)
             neighbors = self.get_valid_neighbors(current, current_road)
-            
-            # Debug pathfinding
-            # if len(closed_set) < 5:
-            #     print(f"Checking {current.coordinate}, road: {current_road.direction if current_road else 'None'}, neighbors: {[n.coordinate for n in neighbors]}")
 
             for neighbor in neighbors:
                 if neighbor in closed_set:
@@ -95,8 +91,8 @@ class Car(CellAgent):
 
     def get_valid_neighbors(self, cell, current_road):
         """
-        Returns valid neighbors following road directions and avoiding obstacles.
-        Permite moverse desde destinos a calles adyacentes y viceversa.
+        Regresa los vecinos válidos siguiendo las direcciones de las calles.
+        Ahora sí trata el mapa como un grafo dirigido porque antes estaba mal jaja.
         """
         neighbors = []
 
@@ -107,18 +103,15 @@ class Car(CellAgent):
             "Right": (1, 0)
         }
 
-        # Verificar si estamos en un destino
+        # checa si estamos en un destino
         is_at_destination = any(isinstance(agent, Destination) for agent in cell.agents)
-        # Verificar si estamos en un semáforo
+        # checa si estamos en un semáforo
         is_at_traffic_light = any(isinstance(agent, Traffic_Light) for agent in cell.agents)
 
-        if is_at_traffic_light:
-            # print(f"At Traffic Light {cell.coordinate}")
-            pass
-
-        if is_at_destination or is_at_traffic_light:
-            # Desde un destino o semáforo, podemos movernos a cualquier calle adyacente
-            # siempre que la dirección de la calle sea compatible
+        if is_at_destination:
+            # si estamos en un destino D, solo podemos movernos a calles que apunten en la dirección correcta
+            # o sea si hay un > en (x+1,y) solo puedes entrar si te mueves a la derecha desde (x,y)
+            # antes dejaba que te movieras a cualquier lado y por eso se bugueaba el pathfinding
             for dir_name, (dx, dy) in direction_offsets.items():
                 next_x = cell.coordinate[0] + dx
                 next_y = cell.coordinate[1] + dy
@@ -129,22 +122,55 @@ class Car(CellAgent):
 
                     has_car = any(isinstance(agent, Car) for agent in next_cell.agents if agent != self)
                     has_obstacle = any(isinstance(agent, Obstacle) for agent in next_cell.agents)
-                    
-                    # Check for road, destination or traffic light
+
+                    if has_car or has_obstacle:
+                        continue
+
+                    # busca si hay una calle o semáforo
                     road_agent = self.get_road_at(next_cell)
-                    has_destination = any(isinstance(agent, Destination) for agent in next_cell.agents)
-                    
-                    if (road_agent or has_destination) and not has_car and not has_obstacle:
-                        # Si es una calle, verificar dirección
-                        if isinstance(road_agent, Road):
-                            if road_agent.direction == dir_name:
-                                neighbors.append(next_cell)
-                        # Si es otro semáforo o destino, siempre es válido (asumiendo conectividad)
-                        else:
+
+                    # solo te puedes mover a una calle si su dirección coincide con hacia donde te mueves
+                    if isinstance(road_agent, (Road, Traffic_Light)):
+                        if road_agent.direction == dir_name:
                             neighbors.append(next_cell)
 
+                    # también puedes ir a otro destino D
+                    has_destination = any(isinstance(agent, Destination) for agent in next_cell.agents)
+                    if has_destination:
+                        neighbors.append(next_cell)
+
+        elif is_at_traffic_light:
+            # los semáforos tienen dirección igual que las calles normales
+            # básicamente son calles pero con estado de verde/rojo
+            direction = current_road.direction if current_road else None
+
+            if direction and direction in direction_offsets:
+                dx, dy = direction_offsets[direction]
+                next_x = cell.coordinate[0] + dx
+                next_y = cell.coordinate[1] + dy
+
+                if (0 <= next_x < self.model.grid.dimensions[0] and
+                    0 <= next_y < self.model.grid.dimensions[1]):
+                    next_cell = self.model.grid[(next_x, next_y)]
+
+                    has_car = any(isinstance(agent, Car) for agent in next_cell.agents if agent != self)
+                    has_obstacle = any(isinstance(agent, Obstacle) for agent in next_cell.agents)
+
+                    if has_car or has_obstacle:
+                        return neighbors
+
+                    # puedes moverte a cualquier celda válida (calle, destino, semáforo)
+                    has_valid_path = any(isinstance(agent, (Road, Destination, Traffic_Light)) for agent in next_cell.agents)
+
+                    if has_valid_path:
+                        neighbors.append(next_cell)
+
         elif current_road:
-            # Desde una calle, seguir la dirección del flujo
+            # si estamos en una calle normal, podemos:
+            # 1. seguir en la dirección del flujo (siempre)
+            # 2. doblar a una calle perpendicular si su flujo es compatible (intersecciones)
+
+            # primero agregar el vecino en la dirección actual
             direction = current_road.direction
             if direction in direction_offsets:
                 dx, dy = direction_offsets[direction]
@@ -156,18 +182,27 @@ class Car(CellAgent):
                     next_cell = self.model.grid[(next_x, next_y)]
 
                     has_obstacle = any(isinstance(agent, Obstacle) for agent in next_cell.agents)
-                    # Allow moving to Road, Destination, or Traffic_Light
-                    has_valid_path = any(isinstance(agent, (Road, Destination, Traffic_Light)) for agent in next_cell.agents)
                     has_car = any(isinstance(agent, Car) for agent in next_cell.agents if agent != self)
 
-                    if has_valid_path and not has_obstacle and not has_car:
-                        neighbors.append(next_cell)
-                    else:
-                        pass
-                        # print(f"Rejected {next_cell.coordinate}: path={has_valid_path}, obs={has_obstacle}, car={has_car}")
+                    if not has_obstacle and not has_car:
+                        # puedes ir a calles, destinos o semáforos
+                        has_valid_path = any(isinstance(agent, (Road, Destination, Traffic_Light)) for agent in next_cell.agents)
+                        if has_valid_path:
+                            neighbors.append(next_cell)
 
-            # También permitir moverse a destinos adyacentes (si no están en la dirección principal)
-            for dx, dy in direction_offsets.values():
+            # Permitir doblar en intersecciones: puedes entrar a una calle perpendicular
+            # siempre que NO vayas en contra de su flujo
+            opposite_dirs = {
+                "Up": "Down",
+                "Down": "Up",
+                "Left": "Right",
+                "Right": "Left"
+            }
+
+            for dir_name, (dx, dy) in direction_offsets.items():
+                if dir_name == direction:
+                    continue
+
                 next_x = cell.coordinate[0] + dx
                 next_y = cell.coordinate[1] + dy
 
@@ -175,11 +210,31 @@ class Car(CellAgent):
                     0 <= next_y < self.model.grid.dimensions[1]):
                     next_cell = self.model.grid[(next_x, next_y)]
 
-                    has_destination = any(isinstance(agent, Destination) for agent in next_cell.agents)
+                    has_obstacle = any(isinstance(agent, Obstacle) for agent in next_cell.agents)
                     has_car = any(isinstance(agent, Car) for agent in next_cell.agents if agent != self)
 
-                    if has_destination and not has_car and next_cell not in neighbors:
+                    if has_obstacle or has_car:
+                        continue
+
+                    road_agent = self.get_road_at(next_cell)
+                    has_destination = any(isinstance(agent, Destination) for agent in next_cell.agents)
+
+                    # Permitir movimiento a destinos adyacentes
+                    if has_destination and next_cell not in neighbors:
                         neighbors.append(next_cell)
+
+                    # Permitir cambio de carril: moverse a una calle adyacente con la MISMA dirección
+                    if isinstance(road_agent, (Road, Traffic_Light)):
+                        if road_agent.direction == direction:
+                            # Cambio de carril permitido
+                            if next_cell not in neighbors:
+                                neighbors.append(next_cell)
+                        # Permitir doblar a una calle SI NO vas en dirección opuesta a su flujo
+                        # Ejemplo: si la calle va Right, NO puedes entrar desde la derecha (irías contra flujo)
+                        elif road_agent.direction != opposite_dirs.get(dir_name):
+                            # No estás yendo contra el flujo, puedes entrar (doblar en intersección)
+                            if next_cell not in neighbors:
+                                neighbors.append(next_cell)
 
         return neighbors
 
@@ -256,12 +311,33 @@ class Car(CellAgent):
         self.move_along_path()
 
 
-class Traffic_Light(FixedAgent):
+class Road(FixedAgent):
     """
-    Traffic light agent.
-    Estructura de trafficBase.Traffic_Light
+    Road agent that determines where cars can move and in which direction.
+    Estructura de trafficBase.Road
     """
-    def __init__(self, model, cell, state=False, timeToChange=10):
+    def __init__(self, model, cell, direction="Left"):
+        """
+        Creates a new road.
+        Args:
+            model: Model reference for the agent
+            cell: The initial position of the agent
+            direction: Direction of traffic flow
+        """
+        super().__init__(model)
+        self.cell = cell
+        self.direction = direction
+
+    def step(self):
+        pass
+
+
+class Traffic_Light(Road):
+    """
+    Traffic light agent que hereda de Road porque básicamente es una calle con semáforo.
+    Tiene todo lo de una calle normal pero con estado de verde/rojo.
+    """
+    def __init__(self, model, cell, state=False, timeToChange=10, direction="Right"):
         """
         Creates a new traffic light.
         Args:
@@ -269,9 +345,10 @@ class Traffic_Light(FixedAgent):
             cell: The initial position of the agent
             state: Whether the traffic light is green or red
             timeToChange: After how many steps should the traffic light change color
+            direction: Direction of traffic flow (igual que la calle que reemplaza)
         """
-        super().__init__(model)
-        self.cell = cell
+        # llama al init de Road para que herede direction correctamente
+        super().__init__(model, cell, direction)
         self.state = state
         self.timeToChange = timeToChange
 
@@ -316,27 +393,6 @@ class Obstacle(FixedAgent):
         """
         super().__init__(model)
         self.cell = cell
-
-    def step(self):
-        pass
-
-
-class Road(FixedAgent):
-    """
-    Road agent that determines where cars can move and in which direction.
-    Estructura de trafficBase.Road
-    """
-    def __init__(self, model, cell, direction="Left"):
-        """
-        Creates a new road.
-        Args:
-            model: Model reference for the agent
-            cell: The initial position of the agent
-            direction: Direction of traffic flow
-        """
-        super().__init__(model)
-        self.cell = cell
-        self.direction = direction
 
     def step(self):
         pass

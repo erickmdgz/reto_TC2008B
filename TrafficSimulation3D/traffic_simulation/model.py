@@ -23,7 +23,7 @@ class CityModel(Model):
         self.steps_count = 0
         self.cars_spawned = 0
         self.cars_reached_destination = 0
-        self.spawn_interval = 1  # Spawn a car every 5 steps
+        self.spawn_interval = 10  # Spawn a car every 5 steps
 
         # Load the map file
         with open("city_files/2024_base.txt") as baseFile:
@@ -49,11 +49,14 @@ class CityModel(Model):
                             self.spawn_points.append(cell)
 
                     elif col in ["S", "s"]:
+                        # detectar la dirección del semáforo checando las calles vecinas
+                        direction = self.detect_traffic_light_direction(lines, r, c)
                         agent = Traffic_Light(
                             self,
                             cell,
                             False if col == "S" else True,
                             int(dataDictionary[col]),
+                            direction
                         )
                         self.traffic_lights.append(agent)
 
@@ -74,6 +77,36 @@ class CityModel(Model):
         self.datacollector = DataCollector(model_reporters)
         self.running = True
         self.datacollector.collect(self)
+
+    def detect_traffic_light_direction(self, lines, row, col):
+        """
+        Detecta la dirección de un semáforo checando las calles adyacentes.
+        El semáforo hereda la dirección de las calles que lo rodean.
+        """
+        # mapeo de caracteres a direcciones
+        direction_map = {
+            ">": "Right",
+            "<": "Left",
+            "^": "Up",
+            "v": "Down"
+        }
+
+        # checa las 4 direcciones adyacentes
+        # izquierda
+        if col > 0 and lines[row][col - 1] in direction_map:
+            return direction_map[lines[row][col - 1]]
+        # derecha
+        if col < len(lines[row]) - 1 and lines[row][col + 1] in direction_map:
+            return direction_map[lines[row][col + 1]]
+        # arriba
+        if row > 0 and lines[row - 1][col] in direction_map:
+            return direction_map[lines[row - 1][col]]
+        # abajo
+        if row < len(lines) - 1 and lines[row + 1][col] in direction_map:
+            return direction_map[lines[row + 1][col]]
+
+        # si no encontró ninguna calle vecina, default a Right
+        return "Right"
 
     def is_spawn_point(self, x, y, direction):
         """
