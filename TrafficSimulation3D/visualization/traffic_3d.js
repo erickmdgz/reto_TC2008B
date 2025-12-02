@@ -231,12 +231,12 @@ function setupScene() {
 
     // Setup lighting
     // Patrón de CG-2025.base_lighting.setupScene()
-    // Valores reducidos para iluminacion mas suave
+    // Luz blanca para iluminacion neutral
     let light = new Light3D(0,
         [15, 20, 15],              // Position
-        [0.15, 0.15, 0.15, 1.0],   // Ambient (reducido)
-        [0.5, 0.5, 0.5, 1.0],      // Diffuse (reducido)
-        [0.3, 0.3, 0.3, 1.0]);     // Specular (reducido)
+        [1.0, 1.0, 1.0, 1.0],      // Ambient (blanco)
+        [1.0, 1.0, 1.0, 1.0],      // Diffuse (blanco)
+        [1.0, 1.0, 1.0, 1.0]);     // Specular (blanco)
     scene.addLight(light);
 }
 
@@ -246,8 +246,6 @@ function setupObjects(scene, gl, programInfo) {
     const baseCube = new Object3D(-1);
     baseCube.prepareVAO(gl, programInfo);
     baseCubeRef = baseCube;
-
-    // Ya no creamos coche de prueba porque el modelo funciona correctamente
 
     // Setup roads (gray ground)
     // Escala 0.5 porque el cubo base tiene 2 unidades (de -1 a 1) y las celdas son de 1 unidad
@@ -295,11 +293,15 @@ function setupObjects(scene, gl, programInfo) {
             obstacle.bufferInfo = buildingModel.bufferInfo;
             obstacle.vao = buildingModel.vao;
             obstacle.scale = { x: 0.45, y: 0.45, z: 0.45 }; // Escala para modelos OBJ
+            // Offset upward to show floor beneath
+            obstacle.position.y += 0.05;
         } else {
             obstacle.arrays = baseCube.arrays;
             obstacle.bufferInfo = baseCube.bufferInfo;
             obstacle.vao = baseCube.vao;
             obstacle.scale = { x: 0.45, y: 1.5, z: 0.45 };
+            // Offset upward to show floor beneath
+            obstacle.position.y += 0.75;
         }
         obstacle.color = [0.6, 0.6, 0.7, 1.0];  // Light gray/blue
         scene.addObject(obstacle);
@@ -354,6 +356,11 @@ function setupObjects(scene, gl, programInfo) {
         }
         // Cada coche tiene un color aleatorio para distinguirlos
         car.color = [Math.random(), Math.random(), Math.random(), 1.0];
+
+        // Guardar posicion inicial para interpolacion
+        car.startPos = { x: car.position.x, y: car.position.y, z: car.position.z };
+        car.targetPos = { x: car.position.x, y: car.position.y, z: car.position.z };
+
         scene.addObject(car);
     }
 }
@@ -489,15 +496,17 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
 
 // Dibujar un coche con su modelo 3D
 function drawCar(gl, programInfo, car, viewProjectionMatrix, fract) {
+    // Interpolacion de posicion usando delta time (fract va de 0 a 1)
+    // Lerp entre startPos y targetPos
+    if (car.startPos && car.targetPos) {
+        car.position.x = car.startPos.x + (car.targetPos.x - car.startPos.x) * fract;
+        car.position.y = car.startPos.y + (car.targetPos.y - car.startPos.y) * fract;
+        car.position.z = car.startPos.z + (car.targetPos.z - car.startPos.z) * fract;
+    }
+
     // Actualizar rotacion del coche segun su direccion de movimiento
     if (car.direction) {
         car.rotRad.y = getRotationFromDirection(car.direction);
-        // Debug: log primeros 3 coches para ver si funciona
-        if (car.id && car.id.toString().endsWith('0')) {
-            console.log(`Car ${car.id}: direction=${car.direction}, rotY=${car.rotRad.y}`);
-        }
-    } else {
-        console.log(`Car ${car.id}: NO DIRECTION`);
     }
 
     // Dibujar el cuerpo del coche usando el modelo 3D cargado
@@ -635,6 +644,11 @@ async function drawScene() {
             }
             // Color aleatorio para cada coche nuevo
             car.color = [Math.random(), Math.random(), Math.random(), 1.0];
+
+            // Inicializar posiciones para interpolacion
+            car.startPos = { x: car.position.x, y: car.position.y, z: car.position.z };
+            car.targetPos = { x: car.position.x, y: car.position.y, z: car.position.z };
+
             scene.addObject(car);
         }
     }
@@ -680,7 +694,25 @@ async function drawScene() {
     // Update the scene after the elapsed duration
     if (elapsed >= duration) {
         elapsed = 0;
+
+        // Guardar posiciones actuales como startPos antes del update
+        for (const car of cars) {
+            if (car.startPos && car.targetPos) {
+                car.startPos.x = car.targetPos.x;
+                car.startPos.y = car.targetPos.y;
+                car.startPos.z = car.targetPos.z;
+            }
+        }
+
         await update();
+
+        // Actualizar targetPos con las nuevas posiciones del servidor
+        for (const car of cars) {
+            if (!car.startPos) {
+                car.startPos = { x: car.position.x, y: car.position.y, z: car.position.z };
+            }
+            car.targetPos = { x: car.position.x, y: car.position.y, z: car.position.z };
+        }
     }
 
     requestAnimationFrame(drawScene);
