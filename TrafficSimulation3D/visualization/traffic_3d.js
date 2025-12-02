@@ -411,6 +411,18 @@ function getCarUniforms() {
     };
 }
 
+// Convertir direccion del coche a angulo de rotacion
+function getRotationFromDirection(direction) {
+    // Ajustar rotacion segun la direccion
+    const directionAngles = {
+        "Norte": 0,
+        "Este": Math.PI / 2,
+        "Sur": Math.PI,
+        "Oeste": 3 * Math.PI / 2
+    };
+    return directionAngles[direction] || 0;
+}
+
 // Dibujar un objeto con sus transformaciones correspondientes
 function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
     // Verificar que el objeto tenga datos validos antes de dibujarlo
@@ -477,6 +489,17 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
 
 // Dibujar un coche con su modelo 3D
 function drawCar(gl, programInfo, car, viewProjectionMatrix, fract) {
+    // Actualizar rotacion del coche segun su direccion de movimiento
+    if (car.direction) {
+        car.rotRad.y = getRotationFromDirection(car.direction);
+        // Debug: log primeros 3 coches para ver si funciona
+        if (car.id && car.id.toString().endsWith('0')) {
+            console.log(`Car ${car.id}: direction=${car.direction}, rotY=${car.rotRad.y}`);
+        }
+    } else {
+        console.log(`Car ${car.id}: NO DIRECTION`);
+    }
+
     // Dibujar el cuerpo del coche usando el modelo 3D cargado
     drawObject(gl, programInfo, car, viewProjectionMatrix, fract);
 }
@@ -613,6 +636,44 @@ async function drawScene() {
             // Color aleatorio para cada coche nuevo
             car.color = [Math.random(), Math.random(), Math.random(), 1.0];
             scene.addObject(car);
+        }
+    }
+
+    // Remover coches que ya no están en el array del API
+    // Esto maneja coches que llegaron a su destino y fueron eliminados
+    const currentCarIds = new Set(cars.map(c => c.id));
+    const objectsToRemove = [];
+
+    for (const obj of scene.objects) {
+        // Verificar si es un coche (tiene id que no está en obstacles, roads, etc)
+        if (obj.id && !currentCarIds.has(obj.id)) {
+            // Verificar que no sea obstáculo, road, destination o traffic light
+            const isStatic = obstacles.some(o => o.id === obj.id) ||
+                roads.some(r => r.id === obj.id) ||
+                destinations.some(d => d.id === obj.id) ||
+                trafficLights.some(l => l.id === obj.id);
+
+            if (!isStatic) {
+                objectsToRemove.push(obj);
+            }
+        }
+    }
+
+    // Remover los objetos identificados
+    for (const obj of objectsToRemove) {
+        const index = scene.objects.indexOf(obj);
+        if (index > -1) {
+            scene.objects.splice(index, 1);
+        }
+
+        // Si el carro que se está siguiendo fue eliminado, detener follow mode
+        if (scene.camera.followTarget === obj) {
+            scene.camera.followTarget = null;
+            scene.camera.followMode = false;
+            if (window.cameraControls) {
+                window.cameraControls.followMode = false;
+                window.cameraControls.carId = 'None';
+            }
         }
     }
 

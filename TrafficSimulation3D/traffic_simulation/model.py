@@ -23,7 +23,7 @@ class CityModel(Model):
         self.steps_count = 0
         self.cars_spawned = 0
         self.cars_reached_destination = 0
-        self.spawn_interval = 10  # Spawn a car every 10 steps
+        self.spawn_interval = 1  # Spawn a car every 5 steps
 
         # Load the map file
         with open("city_files/2024_base.txt") as baseFile:
@@ -63,7 +63,7 @@ class CityModel(Model):
                     elif col == "D":
                         agent = Destination(self, cell)
                         self.destinations.append(cell)
-
+        
         # Set up data collection
         model_reporters = {
             "Cars": lambda m: len(m.cars),
@@ -92,35 +92,52 @@ class CityModel(Model):
 
     def spawn_car(self):
         """
-        Spawns a new car at a random spawn point with a random destination.
-        Patrón de roombaSimulation2 para crear agentes
+        Spawns a new car at a random edge spawn point with a destination as goal.
+        Los carros spawean en los bordes del mapa y se mueven hacia destinos D.
+        Solo crea el carro si existe una ruta válida.
         """
-        if not self.spawn_points or not self.destinations:
+        if len(self.spawn_points) == 0 or len(self.destinations) == 0:
             return None
 
-        # Select a random spawn point
-        spawn_cell = self.random.choice(self.spawn_points)
+        # Intentar hasta 100 veces encontrar una combinación válida
+        for attempt in range(100):
+            # Seleccionar un punto de spawn aleatorio (borde del mapa)
+            spawn_cell = self.random.choice(self.spawn_points)
+            
+            # Debug
+            # print(f"Attempt {attempt}: trying spawn at {spawn_cell.coordinate}")
 
-        # Check if spawn point is occupied
-        has_car = any(isinstance(agent, Car) for agent in spawn_cell.agents)
-        if has_car:
-            return None
+            # Verificar si el spawn point está ocupado
+            has_car = any(isinstance(agent, Car) for agent in spawn_cell.agents)
+            if has_car:
+                continue
 
-        # Select a random destination
-        destination_cell = self.random.choice(self.destinations)
+            # Seleccionar un destino aleatorio como objetivo
+            destination_cell = self.random.choice(self.destinations)
 
-        # Create the car
-        car = Car(self, spawn_cell, destination_cell)
+            # Verificar que existe una ruta válida
+            temp_car = Car(self, spawn_cell, destination_cell)
+            path = temp_car.find_path_to_destination()
 
-        # Inicializar la direccion del coche basado en la calle donde spawneo
-        road = car.get_road_at(spawn_cell)
-        if road:
-            car.direction = road.direction
+            # Remover el temp_car para que no interfiera
+            temp_car.remove()
 
-        self.cars.append(car)
-        self.cars_spawned += 1
+            if len(path) > 0:
+                # Crear el carro real
+                car = Car(self, spawn_cell, destination_cell)
 
-        return car
+                # Obtener la dirección del road donde spawneó
+                road = car.get_road_at(spawn_cell)
+                if road:
+                    car.direction = road.direction
+
+                self.cars.append(car)
+                self.cars_spawned += 1
+
+                return car
+
+        # No se encontró una combinación válida después de 100 intentos
+        return None
 
     def can_spawn_more_cars(self):
         """

@@ -1,4 +1,5 @@
 from mesa.discrete_space import CellAgent, FixedAgent
+import heapq
 
 class Car(CellAgent):
     """
@@ -25,57 +26,80 @@ class Car(CellAgent):
 
     def find_path_to_destination(self):
         """
-        Uses BFS to find path to destination following road directions.
-        Patrón de roombaSimulation2.CleaningAgent.find_path_to_station()
+        Usa A* para encontrar el camino óptimo al destino siguiendo direcciones de calles.
+        Permite llegar a destinos adyacentes incluso sin Road directo.
         """
-        from collections import deque
-
         if self.cell == self.destination:
             return []
 
-        # BFS para encontrar el camino más corto
-        queue = deque([(self.cell, [self.cell])])
-        visited = {self.cell}
+        # Cola de prioridad: (f_score, contador, celda, camino)
+        counter = 0
+        open_set = [(0, counter, self.cell, [self.cell])]
 
-        while queue:
-            current, path = queue.popleft()
+        # g_score: costo desde inicio hasta el nodo
+        g_score = {self.cell: 0}
+
+        # Conjunto de nodos ya procesados
+        closed_set = set()
+
+        while open_set:
+            f, _, current, path = heapq.heappop(open_set)
+
+            if current in closed_set:
+                continue
+
+            closed_set.add(current)
 
             if current == self.destination:
-                return path[1:]  # Excluir la celda actual
+                return path[1:]
 
-            # Obtener la dirección de la calle actual si existe
             current_road = self.get_road_at(current)
-
-            # Explorar vecinos válidos
             neighbors = self.get_valid_neighbors(current, current_road)
+            
+            # Debug pathfinding
+            # if len(closed_set) < 5:
+            #     print(f"Checking {current.coordinate}, road: {current_road.direction if current_road else 'None'}, neighbors: {[n.coordinate for n in neighbors]}")
 
             for neighbor in neighbors:
-                if neighbor not in visited:
-                    visited.add(neighbor)
-                    queue.append((neighbor, path + [neighbor]))
+                if neighbor in closed_set:
+                    continue
 
-        return []  # No se encontró camino
+                tentative_g = g_score[current] + 1
+
+                if neighbor not in g_score or tentative_g < g_score[neighbor]:
+                    g_score[neighbor] = tentative_g
+                    h = self.heuristic(neighbor, self.destination)
+                    f_score = tentative_g + h
+
+                    counter += 1
+                    heapq.heappush(open_set, (f_score, counter, neighbor, path + [neighbor]))
+
+        print(f"No path found from {self.cell.coordinate} to {self.destination.coordinate}")
+        return []
+
+    def heuristic(self, cell1, cell2):
+        """
+        Distancia Manhattan entre dos celdas (heurística admisible para A*).
+        """
+        x1, y1 = cell1.coordinate
+        x2, y2 = cell2.coordinate
+        return abs(x1 - x2) + abs(y1 - y2)
 
     def get_road_at(self, cell):
         """
-        Returns the Road agent at the given cell, if any.
+        Returns the Road or Traffic_Light agent at the given cell, if any.
         Patrón de roombaSimulation2 para buscar agentes en celdas
         """
-        roads = [agent for agent in cell.agents if isinstance(agent, Road)]
+        roads = [agent for agent in cell.agents if isinstance(agent, (Road, Traffic_Light))]
         return roads[0] if roads else None
 
     def get_valid_neighbors(self, cell, current_road):
         """
         Returns valid neighbors following road directions and avoiding obstacles.
-        Similar a roombaSimulation2.CleaningAgent neighbor selection
+        Permite moverse desde destinos a calles adyacentes y viceversa.
         """
-        if not current_road:
-            return []
+        neighbors = []
 
-        # Determinar la dirección de movimiento permitida
-        direction = current_road.direction
-
-        # Mapeo de dirección a offset
         direction_offsets = {
             "Up": (0, 1),
             "Down": (0, -1),
@@ -83,27 +107,81 @@ class Car(CellAgent):
             "Right": (1, 0)
         }
 
-        if direction not in direction_offsets:
-            return []
+        # Verificar si estamos en un destino
+        is_at_destination = any(isinstance(agent, Destination) for agent in cell.agents)
+        # Verificar si estamos en un semáforo
+        is_at_traffic_light = any(isinstance(agent, Traffic_Light) for agent in cell.agents)
 
-        dx, dy = direction_offsets[direction]
-        next_x = cell.coordinate[0] + dx
-        next_y = cell.coordinate[1] + dy
+        if is_at_traffic_light:
+            # print(f"At Traffic Light {cell.coordinate}")
+            pass
 
-        # Verificar si la siguiente celda está dentro del grid
-        if (0 <= next_x < self.model.grid.dimensions[0] and
-            0 <= next_y < self.model.grid.dimensions[1]):
-            next_cell = self.model.grid[(next_x, next_y)]
+        if is_at_destination or is_at_traffic_light:
+            # Desde un destino o semáforo, podemos movernos a cualquier calle adyacente
+            # siempre que la dirección de la calle sea compatible
+            for dir_name, (dx, dy) in direction_offsets.items():
+                next_x = cell.coordinate[0] + dx
+                next_y = cell.coordinate[1] + dy
 
-            # Verificar que no haya obstáculos y que sea una calle válida
-            has_obstacle = any(isinstance(agent, Obstacle) for agent in next_cell.agents)
-            has_road = any(isinstance(agent, (Road, Destination)) for agent in next_cell.agents)
-            has_car = any(isinstance(agent, Car) for agent in next_cell.agents if agent != self)
+                if (0 <= next_x < self.model.grid.dimensions[0] and
+                    0 <= next_y < self.model.grid.dimensions[1]):
+                    next_cell = self.model.grid[(next_x, next_y)]
 
-            if has_road and not has_obstacle and not has_car:
-                return [next_cell]
+                    has_car = any(isinstance(agent, Car) for agent in next_cell.agents if agent != self)
+                    has_obstacle = any(isinstance(agent, Obstacle) for agent in next_cell.agents)
+                    
+                    # Check for road, destination or traffic light
+                    road_agent = self.get_road_at(next_cell)
+                    has_destination = any(isinstance(agent, Destination) for agent in next_cell.agents)
+                    
+                    if (road_agent or has_destination) and not has_car and not has_obstacle:
+                        # Si es una calle, verificar dirección
+                        if isinstance(road_agent, Road):
+                            if road_agent.direction == dir_name:
+                                neighbors.append(next_cell)
+                        # Si es otro semáforo o destino, siempre es válido (asumiendo conectividad)
+                        else:
+                            neighbors.append(next_cell)
 
-        return []
+        elif current_road:
+            # Desde una calle, seguir la dirección del flujo
+            direction = current_road.direction
+            if direction in direction_offsets:
+                dx, dy = direction_offsets[direction]
+                next_x = cell.coordinate[0] + dx
+                next_y = cell.coordinate[1] + dy
+
+                if (0 <= next_x < self.model.grid.dimensions[0] and
+                    0 <= next_y < self.model.grid.dimensions[1]):
+                    next_cell = self.model.grid[(next_x, next_y)]
+
+                    has_obstacle = any(isinstance(agent, Obstacle) for agent in next_cell.agents)
+                    # Allow moving to Road, Destination, or Traffic_Light
+                    has_valid_path = any(isinstance(agent, (Road, Destination, Traffic_Light)) for agent in next_cell.agents)
+                    has_car = any(isinstance(agent, Car) for agent in next_cell.agents if agent != self)
+
+                    if has_valid_path and not has_obstacle and not has_car:
+                        neighbors.append(next_cell)
+                    else:
+                        pass
+                        # print(f"Rejected {next_cell.coordinate}: path={has_valid_path}, obs={has_obstacle}, car={has_car}")
+
+            # También permitir moverse a destinos adyacentes (si no están en la dirección principal)
+            for dx, dy in direction_offsets.values():
+                next_x = cell.coordinate[0] + dx
+                next_y = cell.coordinate[1] + dy
+
+                if (0 <= next_x < self.model.grid.dimensions[0] and
+                    0 <= next_y < self.model.grid.dimensions[1]):
+                    next_cell = self.model.grid[(next_x, next_y)]
+
+                    has_destination = any(isinstance(agent, Destination) for agent in next_cell.agents)
+                    has_car = any(isinstance(agent, Car) for agent in next_cell.agents if agent != self)
+
+                    if has_destination and not has_car and next_cell not in neighbors:
+                        neighbors.append(next_cell)
+
+        return neighbors
 
     def can_move_forward(self):
         """
@@ -133,19 +211,31 @@ class Car(CellAgent):
     def move_along_path(self):
         """
         Moves one step along the calculated path.
-        Patrón de roombaSimulation2.CleaningAgent.move_to_station()
+        Actualiza la dirección del coche según el movimiento realizado.
         """
         if not self.path:
             self.path = self.find_path_to_destination()
 
         if self.path and self.can_move_forward():
             next_cell = self.path.pop(0)
+            old_x, old_y = self.cell.coordinate
+            new_x, new_y = next_cell.coordinate
+
+            # Actualizar posición
             self.cell = next_cell
 
-            # Actualizar la direccion del coche basado en la calle donde esta
-            current_road = self.get_road_at(self.cell)
-            if current_road:
-                self.direction = current_road.direction
+            # Actualizar dirección basado en el movimiento real
+            dx = new_x - old_x
+            dy = new_y - old_y
+
+            if dx > 0:
+                self.direction = "Right"
+            elif dx < 0:
+                self.direction = "Left"
+            elif dy > 0:
+                self.direction = "Up"
+            elif dy < 0:
+                self.direction = "Down"
 
             return True
 
