@@ -60,6 +60,7 @@ async function getCars() {
                     const newCar = new Object3D(car.id, [car.x, car.y, car.z]);
                     newCar.oldPosArray = newCar.posArray;
                     newCar.waiting = car.waiting;
+                    newCar.direction = car.direction;
                     cars.push(newCar);
                 }
             } else {
@@ -80,11 +81,13 @@ async function getCars() {
                         current_car.oldPosArray = current_car.posArray;
                         current_car.position = { x: car.x, y: car.y, z: car.z };
                         current_car.waiting = car.waiting;
+                        current_car.direction = car.direction;
                     } else {
                         // New car appeared
                         const newCar = new Object3D(car.id, [car.x, car.y, car.z]);
                         newCar.oldPosArray = newCar.posArray;
                         newCar.waiting = car.waiting;
+                        newCar.direction = car.direction;
                         cars.push(newCar);
                     }
                 }
