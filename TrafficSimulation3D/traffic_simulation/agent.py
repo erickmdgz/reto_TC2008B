@@ -311,6 +311,114 @@ class Car(CellAgent):
         self.move_along_path()
 
 
+class drunkDriver(Car):
+    """
+    Drunk driver car that moves randomly without following traffic rules.
+    Tiene probabilidad de moverse 2 celdas o hacer movimientos aleatorios.
+    """
+    def __init__(self, model, cell, destination):
+        """
+        Creates a new drunk driver.
+        Args:
+            model: Model reference for the agent
+            cell: The initial position of the agent
+            destination: The destination cell (aunque puede que no llegue nunca)
+        """
+        super().__init__(model, cell, destination)
+        self.crashed = False
+        self.double_move_prob = 0.3  # 30% chance de avanzar 2 celdas
+        self.random_move_prob = 0.2  # 20% chance de movimiento random
+
+    def get_random_neighbor(self):
+        """
+        Obtiene un vecino aleatorio sin importar obstáculos o direcciones.
+        """
+        direction_offsets = {
+            "Up": (0, 1),
+            "Down": (0, -1),
+            "Left": (-1, 0),
+            "Right": (1, 0)
+        }
+
+        possible_neighbors = []
+        for dir_name, (dx, dy) in direction_offsets.items():
+            next_x = self.cell.coordinate[0] + dx
+            next_y = self.cell.coordinate[1] + dy
+
+            if (0 <= next_x < self.model.grid.dimensions[0] and
+                0 <= next_y < self.model.grid.dimensions[1]):
+                next_cell = self.model.grid[(next_x, next_y)]
+                possible_neighbors.append((next_cell, dir_name))
+
+        if possible_neighbors:
+            return self.model.random.choice(possible_neighbors)
+        return None, None
+
+    def step(self):
+        """
+        Executes one step with drunk driving behavior.
+        """
+        # Si ya crasheó, no hace nada
+        if self.crashed:
+            return
+
+        # Si llegó al destino (sorprendentemente), terminar
+        if self.cell == self.destination:
+            self.reached_destination = True
+            self.remove()
+            return
+
+        # Decidir si hace movimiento random
+        if self.model.random.random() < self.random_move_prob:
+            # Movimiento completamente random - SOLO 1 celda cuando es random
+            next_cell, new_direction = self.get_random_neighbor()
+            if next_cell:
+                # Checar si hay obstáculo
+                has_obstacle = any(isinstance(agent, Obstacle) for agent in next_cell.agents)
+                if has_obstacle:
+                    self.crashed = True
+                    return
+
+                # Moverse a la celda random
+                self.cell = next_cell
+                if new_direction:
+                    self.direction = new_direction
+        else:
+            # Intentar seguir el path normal (si existe)
+            if not self.path:
+                self.path = self.find_path_to_destination()
+
+            # Decidir si avanza 2 celdas - SOLO cuando NO es movimiento random
+            moves_to_make = 2 if self.model.random.random() < self.double_move_prob else 1
+
+            for _ in range(moves_to_make):
+                if self.crashed:
+                    break
+
+                if self.path and self.can_move_forward():
+                    next_cell = self.path.pop(0)
+
+                    # Actualizar posición
+                    old_x, old_y = self.cell.coordinate
+                    new_x, new_y = next_cell.coordinate
+                    self.cell = next_cell
+
+                    # Actualizar dirección basado en el movimiento real
+                    dx = new_x - old_x
+                    dy = new_y - old_y
+
+                    if dx > 0:
+                        self.direction = "Right"
+                    elif dx < 0:
+                        self.direction = "Left"
+                    elif dy > 0:
+                        self.direction = "Up"
+                    elif dy < 0:
+                        self.direction = "Down"
+                else:
+                    break
+
+
 class Road(FixedAgent):
     """
     Road agent that determines where cars can move and in which direction.

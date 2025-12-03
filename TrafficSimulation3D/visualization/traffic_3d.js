@@ -47,6 +47,9 @@ let baseCubeRef = null;
 // Car model reference
 let carModelRef = null;
 
+// Cybertruck model reference for drunk drivers
+let cybertruckModelRef = null;
+
 // Building model references
 // Array de modelos de edificios para asignar aleatoriamente
 let buildingModelRefs = [];
@@ -85,6 +88,9 @@ async function main() {
 
     // Load car model
     await loadCarModel(gl, phongProgramInfo);
+
+    // Load cybertruck model for drunk drivers
+    await loadCybertruckModel(gl, phongProgramInfo);
 
     // Load building models
     await loadBuildingModels(gl, phongProgramInfo);
@@ -133,6 +139,29 @@ async function loadCarModel(gl, programInfo) {
         console.error('Error cargando modelo de coche:', error);
         console.log('Usando modelo de cubo como alternativa');
         // Si falla la carga carModelRef quedara null y los coches usaran cubos
+    }
+}
+
+// Cargar el modelo 3D del borrachin para drunk drivers
+async function loadCybertruckModel(gl, programInfo) {
+    try {
+        const response = await fetch('/car_files/borrachin.obj');
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const objText = await response.text();
+
+        console.log('Borrachin cargado, tamaño:', objText.length, 'caracteres');
+
+        cybertruckModelRef = new Object3D(-50);
+        cybertruckModelRef.prepareVAO(gl, programInfo, objText);
+
+        console.log('Modelo de borrachin cargado exitosamente');
+    } catch (error) {
+        console.error('Error cargando modelo de borrachin:', error);
+        console.log('Usando modelo de cubo como alternativa para drunk drivers');
     }
 }
 
@@ -342,20 +371,30 @@ function setupObjects(scene, gl, programInfo) {
     // Al inicio puede que no haya coches pero se iran agregando durante la simulacion
     // Escala 0.25 para mantener proporcion correcta con el cubo base de 2 unidades
     for (const car of cars) {
-        // Usar el modelo de coche si se cargo correctamente sino usar un cubo
-        if (carModelRef) {
+        // Usar cybertruck para drunk drivers, modelo normal para coches normales
+        if (car.type === 'drunk' && cybertruckModelRef) {
+            car.arrays = cybertruckModelRef.arrays;
+            car.bufferInfo = cybertruckModelRef.bufferInfo;
+            car.vao = cybertruckModelRef.vao;
+            car.scale = { x: 0.25, y: 0.25, z: 0.25 };
+        } else if (carModelRef) {
             car.arrays = carModelRef.arrays;
             car.bufferInfo = carModelRef.bufferInfo;
             car.vao = carModelRef.vao;
-            car.scale = { x: 0.25, y: 0.25, z: 0.25 }; // Escala ajustada para el modelo 3D
+            car.scale = { x: 0.25, y: 0.25, z: 0.25 };
         } else {
             car.arrays = baseCube.arrays;
             car.bufferInfo = baseCube.bufferInfo;
             car.vao = baseCube.vao;
             car.scale = { x: 0.3, y: 0.2, z: 0.2 };
         }
-        // Cada coche tiene un color aleatorio para distinguirlos
-        car.color = [Math.random(), Math.random(), Math.random(), 1.0];
+
+        // Color especial para drunk drivers (rojo si crasheó)
+        if (car.type === 'drunk') {
+            car.color = car.crashed ? [1.0, 0.0, 0.0, 1.0] : [0.8, 0.8, 0.0, 1.0]; // Amarillo o rojo
+        } else {
+            car.color = [Math.random(), Math.random(), Math.random(), 1.0];
+        }
 
         // Guardar posicion inicial para interpolacion
         car.startPos = { x: car.position.x, y: car.position.y, z: car.position.z };
@@ -396,19 +435,25 @@ function getTrafficLightUniforms() {
 
 // Preparar arrays de posiciones de coches para el shader
 // Patron de getTrafficLightUniforms
-function getCarUniforms() {
+function getCarUniforms(fract) {
     const positions = [];
     const numCars = Math.min(cars.length, MAX_CARS);
 
     for (let i = 0; i < MAX_CARS; i++) {
         if (i < cars.length) {
             const car = cars[i];
-            // Usar la posicion del coche
-            // Mismo patron que semaforos
-            positions.push(car.position.x, car.position.y, car.position.z);
+            // Interpolar posicion de luz igual que la posicion del coche
+            if (car.startPos && car.targetPos) {
+                const x = car.startPos.x + (car.targetPos.x - car.startPos.x) * fract;
+                const y = car.startPos.y + (car.targetPos.y - car.startPos.y) * fract;
+                const z = car.startPos.z + (car.targetPos.z - car.startPos.z) * fract;
+                positions.push(x, y, z);
+            } else {
+                positions.push(car.position.x, car.position.y, car.position.z);
+            }
         } else {
-            // Llenar con ceros para los slots no usados
-            positions.push(0, 0, 0);
+            // Llenar con posiciones muy lejanas para no afectar iluminacion
+            positions.push(1000.0, 1000.0, 1000.0);
         }
     }
 
@@ -469,7 +514,7 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
 
     // Obtener uniforms de luces de semaforos y coches
     const trafficLightUniforms = getTrafficLightUniforms();
-    const carUniforms = getCarUniforms();
+    const carUniforms = getCarUniforms(fract);
 
     // Uniforms del modelo para el shader de Phong
     // Estos valores se pasan al shader para calcular la iluminacion
@@ -507,6 +552,11 @@ function drawCar(gl, programInfo, car, viewProjectionMatrix, fract) {
     // Actualizar rotacion del coche segun su direccion de movimiento
     if (car.direction) {
         car.rotRad.y = getRotationFromDirection(car.direction);
+    }
+
+    // Si es drunk driver y crasheó, actualizar color a rojo
+    if (car.type === 'drunk' && car.crashed) {
+        car.color = [1.0, 0.0, 0.0, 1.0];
     }
 
     // Dibujar el cuerpo del coche usando el modelo 3D cargado
@@ -586,20 +636,23 @@ async function drawScene() {
 
     // Ya no animamos el coche de prueba porque lo quitamos
 
-    // Actualizar dropdown de coches disponibles
+    // Actualizar dropdown de coches disponibles - SOLO drunk drivers
     if (window.carIdController && cars.length > 0) {
-        const currentCarIds = cars.map(c => c.id);
-        const dropdownOptions = ['None', ...currentCarIds];
+        // Filtrar solo drunk drivers
+        const drunkDrivers = cars.filter(c => c.type === 'drunk');
+        const drunkDriverIds = drunkDrivers.map(c => c.id);
+        const dropdownOptions = ['None', ...drunkDriverIds];
 
-        // Solo actualizar si cambio el numero de coches
-        if (!window.lastCarCount || window.lastCarCount !== cars.length) {
+        // Solo actualizar si cambio el numero de drunk drivers
+        const drunkCount = drunkDrivers.length;
+        if (!window.lastDrunkCount || window.lastDrunkCount !== drunkCount) {
             // Destruir el controller viejo
             window.carIdController.destroy();
 
             // Crear uno nuevo con las opciones actualizadas
             const cameraFolder = window.carIdController.parent;
             window.carIdController = cameraFolder.add(window.cameraControls, 'carId', dropdownOptions)
-                .name('Car ID')
+                .name('Drunk Driver ID')
                 .onChange((carId) => {
                     if (carId === 'None') {
                         scene.camera.followTarget = null;
@@ -615,7 +668,7 @@ async function drawScene() {
                     }
                 });
 
-            window.lastCarCount = cars.length;
+            window.lastDrunkCount = drunkCount;
         }
     }
 
@@ -630,8 +683,13 @@ async function drawScene() {
     // Escala 0.25 para mantener proporcion correcta con el cubo base de 2 unidades
     for (const car of cars) {
         if (!scene.objects.includes(car)) {
-            // Usar el modelo de coche si se cargo correctamente sino usar un cubo
-            if (carModelRef) {
+            // Usar cybertruck para drunk drivers, modelo normal para coches normales
+            if (car.type === 'drunk' && cybertruckModelRef) {
+                car.arrays = cybertruckModelRef.arrays;
+                car.bufferInfo = cybertruckModelRef.bufferInfo;
+                car.vao = cybertruckModelRef.vao;
+                car.scale = { x: 0.25, y: 0.25, z: 0.25 };
+            } else if (carModelRef) {
                 car.arrays = carModelRef.arrays;
                 car.bufferInfo = carModelRef.bufferInfo;
                 car.vao = carModelRef.vao;
@@ -642,8 +700,13 @@ async function drawScene() {
                 car.vao = baseCubeRef.vao;
                 car.scale = { x: 0.3, y: 0.2, z: 0.2 };
             }
-            // Color aleatorio para cada coche nuevo
-            car.color = [Math.random(), Math.random(), Math.random(), 1.0];
+
+            // Color especial para drunk drivers
+            if (car.type === 'drunk') {
+                car.color = car.crashed ? [1.0, 0.0, 0.0, 1.0] : [0.8, 0.8, 0.0, 1.0];
+            } else {
+                car.color = [Math.random(), Math.random(), Math.random(), 1.0];
+            }
 
             // Inicializar posiciones para interpolacion
             car.startPos = { x: car.position.x, y: car.position.y, z: car.position.z };
