@@ -10,9 +10,13 @@ class CityModel(Model):
     Estructura de trafficBase.CityModel y roombaSimulation2.RoombaMultiAgentModel
     """
 
-    def __init__(self, seed=42, spawn_interval=10, drunk_crash_prob=0.5,
-                 drunk_ignore_light_prob=0.3, drunk_wrong_way_prob=0.2,
-                 drunk_forget_route_prob=0.15, drunk_zigzag_intensity=0.0):
+    def __init__(self, seed=42, spawn_interval=10,
+                 # Parámetros de coches normales
+                 normal_spawn_ratio=0.75, normal_crash_prob=0.0,
+                 # Parámetros de drunk drivers
+                 drunk_crash_prob=0.5, drunk_ignore_light_prob=0.3,
+                 drunk_wrong_way_prob=0.2, drunk_forget_route_prob=0.15,
+                 drunk_zigzag_intensity=0.0, drunk_random_move_prob=0.2):
         super().__init__(seed=seed)
 
         # Load the map dictionary
@@ -27,12 +31,17 @@ class CityModel(Model):
         self.cars_reached_destination = 0
         self.spawn_interval = spawn_interval  # Spawn a car every N steps
 
+        # Parámetros de coches normales controlados por sliders
+        self.normal_spawn_ratio = normal_spawn_ratio  # 0.0-1.0 (0.75 = 75% normales)
+        self.normal_crash_prob = normal_crash_prob
+
         # Parámetros de drunk driver controlados por sliders
         self.drunk_crash_prob = drunk_crash_prob
         self.drunk_ignore_light_prob = drunk_ignore_light_prob
         self.drunk_wrong_way_prob = drunk_wrong_way_prob
         self.drunk_forget_route_prob = drunk_forget_route_prob
         self.drunk_zigzag_intensity = drunk_zigzag_intensity  # 0.0 a 1.0
+        self.drunk_random_move_prob = drunk_random_move_prob
 
         # Load the map file
         with open("city_files/2024_base.txt") as baseFile:
@@ -165,11 +174,11 @@ class CityModel(Model):
             temp_car.remove()
 
             if len(path) > 0:
-                # Decidir si crear drunk driver (25% de probabilidad)
-                if self.random.random() < 0.25:
-                    car = drunkDriver(self, spawn_cell, destination_cell)
-                else:
+                # Decidir tipo de coche basado en normal_spawn_ratio
+                if self.random.random() < self.normal_spawn_ratio:
                     car = Car(self, spawn_cell, destination_cell)
+                else:
+                    car = drunkDriver(self, spawn_cell, destination_cell)
 
                 # Obtener la dirección del road donde spawneó
                 road = car.get_road_at(spawn_cell)

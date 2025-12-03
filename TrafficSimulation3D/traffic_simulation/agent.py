@@ -24,6 +24,11 @@ class Car(CellAgent):
         # Puede ser: "Up", "Down", "Left", "Right"
         self.direction = "Right"  # Direccion por defecto
 
+        # Parámetros de choque para coches normales
+        self.crashed = False
+        self.crash_prob = self.model.normal_crash_prob
+        self.crash_recovery_steps = 0
+
     def find_path_to_destination(self):
         """
         Usa A* para encontrar el camino óptimo al destino siguiendo direcciones de calles.
@@ -273,6 +278,14 @@ class Car(CellAgent):
 
         if self.path and self.can_move_forward():
             next_cell = self.path.pop(0)
+
+            # Verificar colisión con probabilidad de choque
+            has_car = any(isinstance(agent, Car) for agent in next_cell.agents if agent != self)
+            if has_car and self.model.random.random() < self.crash_prob:
+                self.crashed = True
+                self.crash_recovery_steps = 10
+                return False
+
             old_x, old_y = self.cell.coordinate
             new_x, new_y = next_cell.coordinate
 
@@ -294,13 +307,75 @@ class Car(CellAgent):
 
             return True
 
+        # Si no hay ruta, seguir en la dirección del camino
+        if not self.path:
+            return self.continue_in_road_direction()
+
         return False
+
+    def continue_in_road_direction(self):
+        """
+        Si no hay ruta, sigue avanzando en la dirección del camino actual.
+        Evita congestionamientos cuando el pathfinding falla.
+        """
+        direction_offsets = {
+            "Up": (0, 1),
+            "Down": (0, -1),
+            "Left": (-1, 0),
+            "Right": (1, 0)
+        }
+
+        current_road = self.get_road_at(self.cell)
+        if not current_road:
+            return False
+
+        direction = current_road.direction
+        if direction not in direction_offsets:
+            return False
+
+        dx, dy = direction_offsets[direction]
+        next_x = self.cell.coordinate[0] + dx
+        next_y = self.cell.coordinate[1] + dy
+
+        # Verificar límites del grid
+        if not (0 <= next_x < self.model.grid.dimensions[0] and
+                0 <= next_y < self.model.grid.dimensions[1]):
+            return False
+
+        next_cell = self.model.grid[(next_x, next_y)]
+
+        # Verificar obstáculos y otros coches
+        has_obstacle = any(isinstance(agent, Obstacle) for agent in next_cell.agents)
+        has_car = any(isinstance(agent, Car) for agent in next_cell.agents if agent != self)
+
+        if has_obstacle or has_car:
+            return False
+
+        # Verificar semáforo en rojo en celda actual
+        traffic_lights = [agent for agent in self.cell.agents if isinstance(agent, Traffic_Light)]
+        if traffic_lights and not traffic_lights[0].state:
+            self.waiting_at_light = True
+            return False
+
+        self.waiting_at_light = False
+
+        # Moverse en la dirección del camino
+        self.cell = next_cell
+        self.direction = direction
+        return True
 
     def step(self):
         """
         Executes one step of the agent's behavior.
         Estructura de roombaSimulation2.CleaningAgent.step()
         """
+        # Si está en recuperación de choque
+        if self.crash_recovery_steps > 0:
+            self.crash_recovery_steps -= 1
+            if self.crash_recovery_steps == 0:
+                self.crashed = False
+            return
+
         # Si llegó al destino, marcar como completado
         if self.cell == self.destination:
             self.reached_destination = True
@@ -326,8 +401,7 @@ class drunkDriver(Car):
         """
         super().__init__(model, cell, destination)
         self.crashed = False
-        self.double_move_prob = 0.3  # 30% chance de avanzar 2 celdas
-        self.random_move_prob = 0.2  # 20% chance de movimiento random
+        self.random_move_prob = self.model.drunk_random_move_prob  # Configurable via slider
 
         # Parámetros controlados por sliders del modelo
         self.crash_prob = self.model.drunk_crash_prob
@@ -544,49 +618,42 @@ class drunkDriver(Car):
             if not self.path:
                 self.path = self.find_path_to_destination()
 
-            moves_to_make = 2 if self.model.random.random() < self.double_move_prob else 1
+            # Siempre avanza 1 celda (speeding eliminado)
+            if self.path and self.can_move_forward_drunk():
+                next_cell = self.path.pop(0)
 
-            for _ in range(moves_to_make):
-                if self.crashed:
-                    break
+                has_obstacle = any(isinstance(agent, Obstacle) for agent in next_cell.agents)
+                if has_obstacle:
+                    if self.model.random.random() < self.crash_prob:
+                        self.crashed = True
+                        self.crash_recovery_steps = 10
+                    return
 
-                if self.path and self.can_move_forward_drunk():
-                    next_cell = self.path.pop(0)
+                has_car = any(isinstance(agent, Car) for agent in next_cell.agents if agent != self)
+                if has_car:
+                    if self.model.random.random() < self.crash_prob:
+                        self.crashed = True
+                        self.crash_recovery_steps = 10
+                    return
 
-                    has_obstacle = any(isinstance(agent, Obstacle) for agent in next_cell.agents)
-                    if has_obstacle:
-                        if self.model.random.random() < self.crash_prob:
-                            self.crashed = True
-                            self.crash_recovery_steps = 10
-                        break
+                # Aplicar zigzag
+                next_cell = self.apply_zigzag(next_cell)
 
-                    has_car = any(isinstance(agent, Car) for agent in next_cell.agents if agent != self)
-                    if has_car:
-                        if self.model.random.random() < self.crash_prob:
-                            self.crashed = True
-                            self.crash_recovery_steps = 10
-                        break
+                old_x, old_y = self.cell.coordinate
+                new_x, new_y = next_cell.coordinate
+                self.cell = next_cell
 
-                    # Aplicar zigzag
-                    next_cell = self.apply_zigzag(next_cell)
+                dx = new_x - old_x
+                dy = new_y - old_y
 
-                    old_x, old_y = self.cell.coordinate
-                    new_x, new_y = next_cell.coordinate
-                    self.cell = next_cell
-
-                    dx = new_x - old_x
-                    dy = new_y - old_y
-
-                    if dx > 0:
-                        self.direction = "Right"
-                    elif dx < 0:
-                        self.direction = "Left"
-                    elif dy > 0:
-                        self.direction = "Up"
-                    elif dy < 0:
-                        self.direction = "Down"
-                else:
-                    break
+                if dx > 0:
+                    self.direction = "Right"
+                elif dx < 0:
+                    self.direction = "Left"
+                elif dy > 0:
+                    self.direction = "Up"
+                elif dy < 0:
+                    self.direction = "Down"
 
 
 class Road(FixedAgent):

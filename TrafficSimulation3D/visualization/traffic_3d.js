@@ -20,6 +20,7 @@ import {
     cars, trafficLights, obstacles, roads, destinations,
     initTrafficModel, update, getCars, getTrafficLights,
     getObstacles, getRoads, getDestinations, setSpawnInterval,
+    normalCarParams, updateNormalParams,
     drunkDriverParams, updateDrunkParams
 } from './libs/api_connection.js';
 
@@ -970,7 +971,7 @@ function setupUI() {
             scene.camera.followDistance = value;
         });
 
-    // Simulation speed controls
+    // === SIMULATION (general) ===
     const simulationFolder = gui.addFolder('Simulation:')
 
     // Objeto para controlar velocidad de simulacion
@@ -995,40 +996,66 @@ function setupUI() {
             setSpawnInterval(value);
         });
 
-    // Drunk Driver sliders - dentro de simulationFolder existente
-    simulationFolder.add(drunkDriverParams, 'drunk_crash_prob', 0, 1)
+    // === NORMAL CARS ===
+    const normalFolder = gui.addFolder('Normal Cars:')
+
+    normalFolder.add(normalCarParams, 'normal_spawn_ratio', 0, 1)
+        .name('Spawn Ratio')
+        .step(0.05)
+        .onChange((value) => {
+            updateNormalParams({ normal_spawn_ratio: value });
+        });
+
+    normalFolder.add(normalCarParams, 'normal_crash_prob', 0, 1)
+        .name('Crash Prob')
+        .step(0.05)
+        .onChange((value) => {
+            updateNormalParams({ normal_crash_prob: value });
+        });
+
+    // === DRUNK DRIVERS ===
+    const drunkFolder = gui.addFolder('Drunk Drivers:')
+
+    drunkFolder.add(drunkDriverParams, 'drunk_crash_prob', 0, 1)
         .name('Crash Prob')
         .step(0.05)
         .onChange((value) => {
             updateDrunkParams({ drunk_crash_prob: value });
         });
 
-    simulationFolder.add(drunkDriverParams, 'drunk_ignore_light_prob', 0, 1)
+    drunkFolder.add(drunkDriverParams, 'drunk_ignore_light_prob', 0, 1)
         .name('Ignore Lights')
         .step(0.05)
         .onChange((value) => {
             updateDrunkParams({ drunk_ignore_light_prob: value });
         });
 
-    simulationFolder.add(drunkDriverParams, 'drunk_wrong_way_prob', 0, 1)
+    drunkFolder.add(drunkDriverParams, 'drunk_wrong_way_prob', 0, 1)
         .name('Wrong Way')
         .step(0.05)
         .onChange((value) => {
             updateDrunkParams({ drunk_wrong_way_prob: value });
         });
 
-    simulationFolder.add(drunkDriverParams, 'drunk_forget_route_prob', 0, 1)
+    drunkFolder.add(drunkDriverParams, 'drunk_forget_route_prob', 0, 1)
         .name('Forget Route')
         .step(0.05)
         .onChange((value) => {
             updateDrunkParams({ drunk_forget_route_prob: value });
         });
 
-    simulationFolder.add(drunkDriverParams, 'drunk_zigzag_intensity', 0, 1)
+    drunkFolder.add(drunkDriverParams, 'drunk_zigzag_intensity', 0, 1)
         .name('Zigzag')
         .step(0.05)
         .onChange((value) => {
             updateDrunkParams({ drunk_zigzag_intensity: value });
+        });
+
+    drunkFolder.add(drunkDriverParams, 'drunk_random_move_prob', 0, 1)
+        .name('Random Move')
+        .step(0.05)
+        .onChange((value) => {
+            updateDrunkParams({ drunk_random_move_prob: value });
         });
 
     // Guardar referencia para actualizar el dropdown
