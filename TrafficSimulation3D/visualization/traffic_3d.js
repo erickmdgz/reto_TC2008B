@@ -19,7 +19,7 @@ import { Camera3D } from './libs/camera3d';
 import {
     cars, trafficLights, obstacles, roads, destinations,
     initTrafficModel, update, getCars, getTrafficLights,
-    getObstacles, getRoads, getDestinations
+    getObstacles, getRoads, getDestinations, setSpawnInterval
 } from './libs/api_connection.js';
 
 // Define the shader code, using GLSL 3.00
@@ -974,7 +974,8 @@ function setupUI() {
 
     // Objeto para controlar velocidad de simulacion
     const simulationControls = {
-        updateSpeed: 1000 // Valor inicial en ms
+        updateSpeed: 1000, // Valor inicial en ms
+        spawnInterval: 10  // Cada cuantos steps aparece un coche
     };
 
     // Slider para controlar velocidad de actualizacion
@@ -983,6 +984,14 @@ function setupUI() {
         .name('Update Speed (ms)')
         .onChange((value) => {
             duration = value;
+        });
+
+    // Slider para controlar cada cuantos steps aparecen coches
+    // Rango de 1 (muy frecuente) a 50 (poco frecuente)
+    simulationFolder.add(simulationControls, 'spawnInterval', 1, 50, 1)
+        .name('Spawn Interval')
+        .onChange((value) => {
+            setSpawnInterval(value);
         });
 
     // Guardar referencia para actualizar el dropdown

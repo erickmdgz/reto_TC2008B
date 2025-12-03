@@ -223,8 +223,31 @@ async function update() {
     }
 }
 
+/*
+ * Sets the spawn interval (how many steps between car spawns).
+ */
+async function setSpawnInterval(spawnInterval) {
+    try {
+        let response = await fetch(agent_server_uri + "setSpawnInterval", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ spawn_interval: spawnInterval })
+        });
+
+        if (response.ok) {
+            let result = await response.json();
+            console.log(result.message);
+            return result.spawn_interval;
+        }
+
+    } catch (error) {
+        console.log(error);
+    }
+    return null;
+}
+
 export {
     cars, trafficLights, obstacles, roads, destinations,
     initTrafficModel, update, getCars, getTrafficLights,
-    getObstacles, getRoads, getDestinations
+    getObstacles, getRoads, getDestinations, setSpawnInterval
 };

@@ -29,13 +29,38 @@ def initModel():
     if request.method == 'POST':
         currentStep = 0
 
-        print("Initializing traffic model...")
+        # Get spawn_interval from request body if provided
+        data = request.get_json() or {}
+        spawn_interval = data.get('spawn_interval', 10)
 
-        # Create the model
-        trafficModel = CityModel()
+        print(f"Initializing traffic model with spawn_interval={spawn_interval}...")
+
+        # Create the model with spawn_interval parameter
+        trafficModel = CityModel(spawn_interval=spawn_interval)
 
         # Return success message
-        return jsonify({"message": "Traffic model initialized successfully."})
+        return jsonify({
+            "message": "Traffic model initialized successfully.",
+            "spawn_interval": trafficModel.spawn_interval
+        })
+
+# Route to update spawn interval during simulation
+@app.route('/setSpawnInterval', methods=['POST'])
+def setSpawnInterval():
+    global trafficModel
+
+    if request.method == 'POST':
+        data = request.get_json() or {}
+        spawn_interval = data.get('spawn_interval', 10)
+
+        if trafficModel:
+            trafficModel.spawn_interval = max(1, int(spawn_interval))
+            return jsonify({
+                "message": f"Spawn interval updated to {trafficModel.spawn_interval}.",
+                "spawn_interval": trafficModel.spawn_interval
+            })
+        else:
+            return jsonify({"error": "Model not initialized."}), 400
 
 # Route to get car positions
 @app.route('/getCars', methods=['GET'])
