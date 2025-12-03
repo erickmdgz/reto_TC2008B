@@ -10,7 +10,9 @@ class CityModel(Model):
     Estructura de trafficBase.CityModel y roombaSimulation2.RoombaMultiAgentModel
     """
 
-    def __init__(self, seed=42, spawn_interval=10):
+    def __init__(self, seed=42, spawn_interval=10, drunk_crash_prob=0.5,
+                 drunk_ignore_light_prob=0.3, drunk_wrong_way_prob=0.2,
+                 drunk_forget_route_prob=0.15, drunk_zigzag_intensity=0.0):
         super().__init__(seed=seed)
 
         # Load the map dictionary
@@ -24,6 +26,13 @@ class CityModel(Model):
         self.cars_spawned = 0
         self.cars_reached_destination = 0
         self.spawn_interval = spawn_interval  # Spawn a car every N steps
+
+        # Parámetros de drunk driver controlados por sliders
+        self.drunk_crash_prob = drunk_crash_prob
+        self.drunk_ignore_light_prob = drunk_ignore_light_prob
+        self.drunk_wrong_way_prob = drunk_wrong_way_prob
+        self.drunk_forget_route_prob = drunk_forget_route_prob
+        self.drunk_zigzag_intensity = drunk_zigzag_intensity  # 0.0 a 1.0
 
         # Load the map file
         with open("city_files/2024_base.txt") as baseFile:

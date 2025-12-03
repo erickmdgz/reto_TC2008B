@@ -29,14 +29,26 @@ def initModel():
     if request.method == 'POST':
         currentStep = 0
 
-        # Get spawn_interval from request body if provided
+        # Get parameters from request body
         data = request.get_json() or {}
         spawn_interval = data.get('spawn_interval', 10)
+        drunk_crash_prob = data.get('drunk_crash_prob', 0.5)
+        drunk_ignore_light_prob = data.get('drunk_ignore_light_prob', 0.3)
+        drunk_wrong_way_prob = data.get('drunk_wrong_way_prob', 0.2)
+        drunk_forget_route_prob = data.get('drunk_forget_route_prob', 0.15)
+        drunk_zigzag_intensity = data.get('drunk_zigzag_intensity', 0.0)
 
         print(f"Initializing traffic model with spawn_interval={spawn_interval}...")
 
-        # Create the model with spawn_interval parameter
-        trafficModel = CityModel(spawn_interval=spawn_interval)
+        # Create the model with all parameters
+        trafficModel = CityModel(
+            spawn_interval=spawn_interval,
+            drunk_crash_prob=drunk_crash_prob,
+            drunk_ignore_light_prob=drunk_ignore_light_prob,
+            drunk_wrong_way_prob=drunk_wrong_way_prob,
+            drunk_forget_route_prob=drunk_forget_route_prob,
+            drunk_zigzag_intensity=drunk_zigzag_intensity
+        )
 
         # Return success message
         return jsonify({
@@ -198,6 +210,36 @@ def updateModel():
             'currentStep': currentStep,
             'running': trafficModel.running
         })
+
+# Route to update drunk driver parameters during simulation
+@app.route('/updateDrunkParams', methods=['POST'])
+def updateDrunkParams():
+    global trafficModel
+
+    if request.method == 'POST':
+        data = request.get_json() or {}
+
+        if 'drunk_crash_prob' in data:
+            trafficModel.drunk_crash_prob = data['drunk_crash_prob']
+        if 'drunk_ignore_light_prob' in data:
+            trafficModel.drunk_ignore_light_prob = data['drunk_ignore_light_prob']
+        if 'drunk_wrong_way_prob' in data:
+            trafficModel.drunk_wrong_way_prob = data['drunk_wrong_way_prob']
+        if 'drunk_forget_route_prob' in data:
+            trafficModel.drunk_forget_route_prob = data['drunk_forget_route_prob']
+        if 'drunk_zigzag_intensity' in data:
+            trafficModel.drunk_zigzag_intensity = data['drunk_zigzag_intensity']
+
+        # Actualizar drunk drivers existentes
+        for car in trafficModel.cars:
+            if isinstance(car, drunkDriver):
+                car.crash_prob = trafficModel.drunk_crash_prob
+                car.ignore_light_prob = trafficModel.drunk_ignore_light_prob
+                car.wrong_way_prob = trafficModel.drunk_wrong_way_prob
+                car.forget_route_prob = trafficModel.drunk_forget_route_prob
+                car.zigzag_intensity = trafficModel.drunk_zigzag_intensity
+
+        return jsonify({"message": "Drunk driver parameters updated."})
 
 if __name__ == '__main__':
     # Run the flask server
