@@ -357,12 +357,12 @@ function setupScene() {
 
     // Setup lighting
     // Patrón de CG-2025.base_lighting.setupScene()
-    // Luz blanca para iluminacion neutral
+    // Luz difusa y suave para iluminacion mas natural
     let light = new Light3D(0,
         [15, 20, 15],              // Position
-        [1.0, 1.0, 1.0, 1.0],      // Ambient (blanco)
-        [1.0, 1.0, 1.0, 1.0],      // Diffuse (blanco)
-        [1.0, 1.0, 1.0, 1.0]);     // Specular (blanco)
+        [0.3, 0.3, 0.3, 1.0],      // Ambient (suave)
+        [0.6, 0.6, 0.6, 1.0],      // Diffuse (moderado)
+        [0.4, 0.4, 0.4, 1.0]);     // Specular (reducido)
     scene.addLight(light);
 }
 
@@ -402,12 +402,12 @@ function setupObjects(scene, gl, programInfo) {
 
         // Agregar tile de suelo debajo de cada edificio
         // Patron de roads para crear suelo consistente
-        const groundTile = new Object3D('ground_' + obstacle.id, obstacle.posArray);
+        const groundTile = new Object3D('ground_' + obstacle.id, [obstacle.position.x, 0.03, obstacle.position.z]);
         groundTile.arrays = baseCube.arrays;
         groundTile.bufferInfo = baseCube.bufferInfo;
         groundTile.vao = baseCube.vao;
         groundTile.scale = { x: 0.5, y: 0.025, z: 0.5 };
-        groundTile.color = [0.25, 0.25, 0.25, 1.0];  // Dark gray for building ground
+        groundTile.color = [0.2, 0.2, 0.2, 1.0];  // Dark gray for building ground
         scene.addObject(groundTile);
 
         // Usar modelo de edificio si se cargo correctamente sino usar cubo
@@ -442,7 +442,7 @@ function setupObjects(scene, gl, programInfo) {
         groundTile.bufferInfo = baseCube.bufferInfo;
         groundTile.vao = baseCube.vao;
         groundTile.scale = { x: 0.5, y: 0.025, z: 0.5 };
-        groundTile.color = [0.3, 0.3, 0.3, 1.0];  // Gray like roads
+        groundTile.color = [0.3, 0.3, 0.3, 0.0];  // Transparent
         scene.addObject(groundTile);
 
         // Usar modelo de semaforo si se cargo correctamente sino usar cubo
@@ -461,6 +461,8 @@ function setupObjects(scene, gl, programInfo) {
         // Marcar como objeto emisivo para usar shader de emision
         light.isEmissive = true;
         light.color = light.state ? [0.0, 1.0, 0.0, 1.0] : [1.0, 0.0, 0.0, 1.0];
+        // Ajustar altura del semaforo
+        light.position.y = 0.1;
         scene.addObject(light);
     }
 
@@ -825,11 +827,12 @@ async function drawScene() {
     for (const obj of scene.objects) {
         // Verificar si es un coche (tiene id que no está en obstacles, roads, etc)
         if (obj.id && !currentCarIds.has(obj.id)) {
-            // Verificar que no sea obstáculo, road, destination o traffic light
+            // Verificar que no sea obstáculo, road, destination, traffic light o ground tile
             const isStatic = obstacles.some(o => o.id === obj.id) ||
                 roads.some(r => r.id === obj.id) ||
                 destinations.some(d => d.id === obj.id) ||
-                trafficLights.some(l => l.id === obj.id);
+                trafficLights.some(l => l.id === obj.id) ||
+                obj.id.startsWith('ground_');
 
             if (!isStatic) {
                 objectsToRemove.push(obj);
