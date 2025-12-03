@@ -36,7 +36,7 @@ const scene = new Scene3D();
 let phongProgramInfo = undefined;
 let emissionProgramInfo = undefined;
 let gl = undefined;
-const duration = 1000; // ms
+let duration = 1000; // ms - ahora es variable para poder ajustarla con el slider
 let elapsed = 0;
 let then = 0;
 
@@ -47,8 +47,8 @@ let baseCubeRef = null;
 // Car model reference
 let carModelRef = null;
 
-// Cybertruck model reference for drunk drivers
-let cybertruckModelRef = null;
+// Drunk driver model reference
+let drunkDriverModelRef = null;
 
 // Building model references
 // Array de modelos de edificios para asignar aleatoriamente
@@ -89,8 +89,8 @@ async function main() {
     // Load car model
     await loadCarModel(gl, phongProgramInfo);
 
-    // Load cybertruck model for drunk drivers
-    await loadCybertruckModel(gl, phongProgramInfo);
+    // Load drunk driver model
+    await loadDrunkDriverModel(gl, phongProgramInfo);
 
     // Load building models
     await loadBuildingModels(gl, phongProgramInfo);
@@ -143,7 +143,7 @@ async function loadCarModel(gl, programInfo) {
 }
 
 // Cargar el modelo 3D del borrachin para drunk drivers
-async function loadCybertruckModel(gl, programInfo) {
+async function loadDrunkDriverModel(gl, programInfo) {
     try {
         const response = await fetch('/car_files/borrachin.obj');
 
@@ -153,15 +153,112 @@ async function loadCybertruckModel(gl, programInfo) {
 
         const objText = await response.text();
 
-        console.log('Borrachin cargado, tamaño:', objText.length, 'caracteres');
+        console.log('🚗 Drunk driver model loaded, size:', objText.length, 'characters');
 
-        cybertruckModelRef = new Object3D(-50);
-        cybertruckModelRef.prepareVAO(gl, programInfo, objText);
+        drunkDriverModelRef = new Object3D(-50);
+        drunkDriverModelRef.prepareVAO(gl, programInfo, objText);
 
-        console.log('Modelo de borrachin cargado exitosamente');
+        console.log('🔍 BEFORE TRANSFORMATION:');
+        console.log('  - Arrays exist:', !!drunkDriverModelRef.arrays);
+        console.log('  - Position data exists:', !!drunkDriverModelRef.arrays.a_position);
+        console.log('  - Position data length:', drunkDriverModelRef.arrays.a_position?.data?.length);
+        console.log('  - First 10 vertices:', drunkDriverModelRef.arrays.a_position?.data?.slice(0, 30));
+
+        // Transform the model vertices to fix orientation
+        // Applying proper transformation matrices: Ry(-90°) * Rx(90°)
+        if (drunkDriverModelRef.arrays && drunkDriverModelRef.arrays.a_position) {
+            const positions = drunkDriverModelRef.arrays.a_position.data;
+            const normals = drunkDriverModelRef.arrays.a_normal?.data;
+
+            // Create temporary arrays to store transformed positions
+            const newPositions = new Float32Array(positions.length);
+            const newNormals = normals ? new Float32Array(normals.length) : null;
+
+            // Copy original positions
+            for (let i = 0; i < positions.length; i++) {
+                newPositions[i] = positions[i];
+            }
+            if (normals) {
+                for (let i = 0; i < normals.length; i++) {
+                    newNormals[i] = normals[i];
+                }
+            }
+
+            // Build rotation matrices
+            // Rotation around Y axis by -90 degrees
+            const angleY = -Math.PI / 2;
+            const cosY = Math.cos(angleY);
+            const sinY = Math.sin(angleY);
+
+            // Rotation around X axis by 90 degrees
+            const angleX = Math.PI / 2;
+            const cosX = Math.cos(angleX);
+            const sinX = Math.sin(angleX);
+
+            // Additional 180 degree rotation on X axis to flip upside down
+            const angleX2 = Math.PI; // 180 degrees
+            const cosX2 = Math.cos(angleX2);
+            const sinX2 = Math.sin(angleX2);
+
+            // Combined rotation matrix: Ry(-90°) * Rx(90°) * Rx(180°)
+            // Applying transformations: First Y, then X, then X again
+            // Simplified: Rx(180°) * Rx(90°) = Rx(270°) or Rx(-90°)
+            // So the combined is: Ry(-90°) * Rx(-90°)
+            const angleXCombined = -Math.PI / 2; // 90 + 180 = 270 = -90
+            const cosXC = Math.cos(angleXCombined);
+            const sinXC = Math.sin(angleXCombined);
+
+            // Combined rotation matrix: Rx * Ry (applied right to left)
+            const m00 = cosY;
+            const m01 = sinXC * sinY;
+            const m02 = cosXC * sinY;
+            const m10 = 0;
+            const m11 = cosXC;
+            const m12 = -sinXC;
+            const m20 = -sinY;
+            const m21 = sinXC * cosY;
+            const m22 = cosXC * cosY;
+
+            // Apply combined rotation to each vertex
+            for (let i = 0; i < positions.length; i += 3) {
+                const x = newPositions[i];
+                const y = newPositions[i + 1];
+                const z = newPositions[i + 2];
+
+                positions[i]     = m00 * x + m01 * y + m02 * z;
+                positions[i + 1] = m10 * x + m11 * y + m12 * z;
+                positions[i + 2] = m20 * x + m21 * y + m22 * z;
+            }
+
+            // Apply same rotation to normals
+            if (normals && newNormals) {
+                for (let i = 0; i < normals.length; i += 3) {
+                    const nx = newNormals[i];
+                    const ny = newNormals[i + 1];
+                    const nz = newNormals[i + 2];
+
+                    normals[i]     = m00 * nx + m01 * ny + m02 * nz;
+                    normals[i + 1] = m10 * nx + m11 * ny + m12 * nz;
+                    normals[i + 2] = m20 * nx + m21 * ny + m22 * nz;
+                }
+            }
+
+            // Recreate buffers with transformed vertices
+            drunkDriverModelRef.bufferInfo = twgl.createBufferInfoFromArrays(gl, drunkDriverModelRef.arrays);
+            drunkDriverModelRef.vao = twgl.createVAOFromBufferInfo(gl, programInfo, drunkDriverModelRef.bufferInfo);
+
+            console.log('🔧 AFTER TRANSFORMATION:');
+            console.log('  - First 10 transformed vertices:', drunkDriverModelRef.arrays.a_position?.data?.slice(0, 30));
+            console.log('  - BufferInfo recreated:', !!drunkDriverModelRef.bufferInfo);
+            console.log('  - VAO recreated:', !!drunkDriverModelRef.vao);
+        } else {
+            console.error('❌ TRANSFORMATION FAILED: Arrays not accessible');
+        }
+
+        console.log('✅ Drunk driver model loaded and transformed successfully');
     } catch (error) {
-        console.error('Error cargando modelo de borrachin:', error);
-        console.log('Usando modelo de cubo como alternativa para drunk drivers');
+        console.error('Error loading drunk driver model:', error);
+        console.log('Using cube model as fallback for drunk drivers');
     }
 }
 
@@ -371,11 +468,14 @@ function setupObjects(scene, gl, programInfo) {
     // Al inicio puede que no haya coches pero se iran agregando durante la simulacion
     // Escala 0.25 para mantener proporcion correcta con el cubo base de 2 unidades
     for (const car of cars) {
-        // Usar cybertruck para drunk drivers, modelo normal para coches normales
-        if (car.type === 'drunk' && cybertruckModelRef) {
-            car.arrays = cybertruckModelRef.arrays;
-            car.bufferInfo = cybertruckModelRef.bufferInfo;
-            car.vao = cybertruckModelRef.vao;
+        // Usar drunk driver model para drunk drivers, modelo normal para coches normales
+        if (car.type === 'drunk' && drunkDriverModelRef) {
+            console.log('🍺 Assigning drunk driver model to car:', car.id);
+            console.log('  - Using drunkDriverModelRef with', drunkDriverModelRef.arrays.a_position?.data?.length / 3, 'vertices');
+            console.log('  - First 10 vertices from ref:', drunkDriverModelRef.arrays.a_position?.data?.slice(0, 30));
+            car.arrays = drunkDriverModelRef.arrays;
+            car.bufferInfo = drunkDriverModelRef.bufferInfo;
+            car.vao = drunkDriverModelRef.vao;
             car.scale = { x: 0.25, y: 0.25, z: 0.25 };
         } else if (carModelRef) {
             car.arrays = carModelRef.arrays;
@@ -683,11 +783,12 @@ async function drawScene() {
     // Escala 0.25 para mantener proporcion correcta con el cubo base de 2 unidades
     for (const car of cars) {
         if (!scene.objects.includes(car)) {
-            // Usar cybertruck para drunk drivers, modelo normal para coches normales
-            if (car.type === 'drunk' && cybertruckModelRef) {
-                car.arrays = cybertruckModelRef.arrays;
-                car.bufferInfo = cybertruckModelRef.bufferInfo;
-                car.vao = cybertruckModelRef.vao;
+            // Usar drunk driver model para drunk drivers, modelo normal para coches normales
+            if (car.type === 'drunk' && drunkDriverModelRef) {
+                console.log('🍺 [DYNAMIC] Assigning drunk driver model to new car:', car.id);
+                car.arrays = drunkDriverModelRef.arrays;
+                car.bufferInfo = drunkDriverModelRef.bufferInfo;
+                car.vao = drunkDriverModelRef.vao;
                 car.scale = { x: 0.25, y: 0.25, z: 0.25 };
             } else if (carModelRef) {
                 car.arrays = carModelRef.arrays;
@@ -863,6 +964,22 @@ function setupUI() {
         .name('Distance')
         .onChange((value) => {
             scene.camera.followDistance = value;
+        });
+
+    // Simulation speed controls
+    const simulationFolder = gui.addFolder('Simulation:')
+
+    // Objeto para controlar velocidad de simulacion
+    const simulationControls = {
+        updateSpeed: 1000 // Valor inicial en ms
+    };
+
+    // Slider para controlar velocidad de actualizacion
+    // Rango de 100ms (rapido) a 2000ms (lento)
+    simulationFolder.add(simulationControls, 'updateSpeed', 100, 2000)
+        .name('Update Speed (ms)')
+        .onChange((value) => {
+            duration = value;
         });
 
     // Guardar referencia para actualizar el dropdown
