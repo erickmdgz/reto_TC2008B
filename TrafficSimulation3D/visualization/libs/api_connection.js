@@ -61,6 +61,8 @@ async function getCars() {
                     newCar.oldPosArray = newCar.posArray;
                     newCar.waiting = car.waiting;
                     newCar.direction = car.direction;
+                    newCar.type = car.type;
+                    newCar.crashed = car.crashed;
                     cars.push(newCar);
                 }
             } else {
@@ -82,12 +84,16 @@ async function getCars() {
                         current_car.position = { x: car.x, y: car.y, z: car.z };
                         current_car.waiting = car.waiting;
                         current_car.direction = car.direction;
+                        current_car.type = car.type;
+                        current_car.crashed = car.crashed;
                     } else {
                         // New car appeared
                         const newCar = new Object3D(car.id, [car.x, car.y, car.z]);
                         newCar.oldPosArray = newCar.posArray;
                         newCar.waiting = car.waiting;
                         newCar.direction = car.direction;
+                        newCar.type = car.type;
+                        newCar.crashed = car.crashed;
                         cars.push(newCar);
                     }
                 }

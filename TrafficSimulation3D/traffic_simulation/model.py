@@ -1,7 +1,7 @@
 from mesa import Model
 from mesa.datacollection import DataCollector
 from mesa.discrete_space import OrthogonalMooreGrid
-from .agent import Car, Traffic_Light, Destination, Obstacle, Road
+from .agent import Car, Traffic_Light, Destination, Obstacle, Road, drunkDriver
 import json
 
 class CityModel(Model):
@@ -156,8 +156,11 @@ class CityModel(Model):
             temp_car.remove()
 
             if len(path) > 0:
-                # Crear el carro real
-                car = Car(self, spawn_cell, destination_cell)
+                # Decidir si crear drunk driver (25% de probabilidad)
+                if self.random.random() < 0.25:
+                    car = drunkDriver(self, spawn_cell, destination_cell)
+                else:
+                    car = Car(self, spawn_cell, destination_cell)
 
                 # Obtener la dirección del road donde spawneó
                 road = car.get_road_at(spawn_cell)

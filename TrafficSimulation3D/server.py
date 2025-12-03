@@ -4,7 +4,7 @@
 
 from flask import Flask, request, jsonify
 from traffic_simulation.model import CityModel
-from traffic_simulation.agent import Car, Road, Traffic_Light, Obstacle, Destination
+from traffic_simulation.agent import Car, Road, Traffic_Light, Obstacle, Destination, drunkDriver
 
 # Model instance
 trafficModel = None
@@ -60,7 +60,9 @@ def getCars():
                 "y": 0.25,
                 "z": float(car.cell.coordinate[1]),
                 "waiting": car.waiting_at_light,
-                "direction": direction_map.get(car.direction, "Norte")
+                "direction": direction_map.get(car.direction, "Norte"),
+                "type": "drunk" if isinstance(car, drunkDriver) else "normal",
+                "crashed": car.crashed if isinstance(car, drunkDriver) else False
             }
             for car in trafficModel.cars
         ]

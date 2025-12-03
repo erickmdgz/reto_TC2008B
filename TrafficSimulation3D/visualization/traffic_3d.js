@@ -36,7 +36,7 @@ const scene = new Scene3D();
 let phongProgramInfo = undefined;
 let emissionProgramInfo = undefined;
 let gl = undefined;
-const duration = 1000; // ms
+let duration = 1000; // ms - ahora es variable para poder ajustarla con el slider
 let elapsed = 0;
 let then = 0;
 
@@ -46,6 +46,9 @@ let baseCubeRef = null;
 
 // Car model reference
 let carModelRef = null;
+
+// Drunk driver model reference
+let drunkDriverModelRef = null;
 
 // Building model references
 // Array de modelos de edificios para asignar aleatoriamente
@@ -85,6 +88,9 @@ async function main() {
 
     // Load car model
     await loadCarModel(gl, phongProgramInfo);
+
+    // Load drunk driver model
+    await loadDrunkDriverModel(gl, phongProgramInfo);
 
     // Load building models
     await loadBuildingModels(gl, phongProgramInfo);
@@ -133,6 +139,126 @@ async function loadCarModel(gl, programInfo) {
         console.error('Error cargando modelo de coche:', error);
         console.log('Usando modelo de cubo como alternativa');
         // Si falla la carga carModelRef quedara null y los coches usaran cubos
+    }
+}
+
+// Cargar el modelo 3D del borrachin para drunk drivers
+async function loadDrunkDriverModel(gl, programInfo) {
+    try {
+        const response = await fetch('/car_files/borrachin.obj');
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const objText = await response.text();
+
+        console.log('🚗 Drunk driver model loaded, size:', objText.length, 'characters');
+
+        drunkDriverModelRef = new Object3D(-50);
+        drunkDriverModelRef.prepareVAO(gl, programInfo, objText);
+
+        console.log('🔍 BEFORE TRANSFORMATION:');
+        console.log('  - Arrays exist:', !!drunkDriverModelRef.arrays);
+        console.log('  - Position data exists:', !!drunkDriverModelRef.arrays.a_position);
+        console.log('  - Position data length:', drunkDriverModelRef.arrays.a_position?.data?.length);
+        console.log('  - First 10 vertices:', drunkDriverModelRef.arrays.a_position?.data?.slice(0, 30));
+
+        // Transform the model vertices to fix orientation
+        // Applying proper transformation matrices: Ry(-90°) * Rx(90°)
+        if (drunkDriverModelRef.arrays && drunkDriverModelRef.arrays.a_position) {
+            const positions = drunkDriverModelRef.arrays.a_position.data;
+            const normals = drunkDriverModelRef.arrays.a_normal?.data;
+
+            // Create temporary arrays to store transformed positions
+            const newPositions = new Float32Array(positions.length);
+            const newNormals = normals ? new Float32Array(normals.length) : null;
+
+            // Copy original positions
+            for (let i = 0; i < positions.length; i++) {
+                newPositions[i] = positions[i];
+            }
+            if (normals) {
+                for (let i = 0; i < normals.length; i++) {
+                    newNormals[i] = normals[i];
+                }
+            }
+
+            // Build rotation matrices
+            // Rotation around Y axis by -90 degrees
+            const angleY = -Math.PI / 2;
+            const cosY = Math.cos(angleY);
+            const sinY = Math.sin(angleY);
+
+            // Rotation around X axis by 90 degrees
+            const angleX = Math.PI / 2;
+            const cosX = Math.cos(angleX);
+            const sinX = Math.sin(angleX);
+
+            // Additional 180 degree rotation on X axis to flip upside down
+            const angleX2 = Math.PI; // 180 degrees
+            const cosX2 = Math.cos(angleX2);
+            const sinX2 = Math.sin(angleX2);
+
+            // Combined rotation matrix: Ry(-90°) * Rx(90°) * Rx(180°)
+            // Applying transformations: First Y, then X, then X again
+            // Simplified: Rx(180°) * Rx(90°) = Rx(270°) or Rx(-90°)
+            // So the combined is: Ry(-90°) * Rx(-90°)
+            const angleXCombined = -Math.PI / 2; // 90 + 180 = 270 = -90
+            const cosXC = Math.cos(angleXCombined);
+            const sinXC = Math.sin(angleXCombined);
+
+            // Combined rotation matrix: Rx * Ry (applied right to left)
+            const m00 = cosY;
+            const m01 = sinXC * sinY;
+            const m02 = cosXC * sinY;
+            const m10 = 0;
+            const m11 = cosXC;
+            const m12 = -sinXC;
+            const m20 = -sinY;
+            const m21 = sinXC * cosY;
+            const m22 = cosXC * cosY;
+
+            // Apply combined rotation to each vertex
+            for (let i = 0; i < positions.length; i += 3) {
+                const x = newPositions[i];
+                const y = newPositions[i + 1];
+                const z = newPositions[i + 2];
+
+                positions[i]     = m00 * x + m01 * y + m02 * z;
+                positions[i + 1] = m10 * x + m11 * y + m12 * z;
+                positions[i + 2] = m20 * x + m21 * y + m22 * z;
+            }
+
+            // Apply same rotation to normals
+            if (normals && newNormals) {
+                for (let i = 0; i < normals.length; i += 3) {
+                    const nx = newNormals[i];
+                    const ny = newNormals[i + 1];
+                    const nz = newNormals[i + 2];
+
+                    normals[i]     = m00 * nx + m01 * ny + m02 * nz;
+                    normals[i + 1] = m10 * nx + m11 * ny + m12 * nz;
+                    normals[i + 2] = m20 * nx + m21 * ny + m22 * nz;
+                }
+            }
+
+            // Recreate buffers with transformed vertices
+            drunkDriverModelRef.bufferInfo = twgl.createBufferInfoFromArrays(gl, drunkDriverModelRef.arrays);
+            drunkDriverModelRef.vao = twgl.createVAOFromBufferInfo(gl, programInfo, drunkDriverModelRef.bufferInfo);
+
+            console.log('🔧 AFTER TRANSFORMATION:');
+            console.log('  - First 10 transformed vertices:', drunkDriverModelRef.arrays.a_position?.data?.slice(0, 30));
+            console.log('  - BufferInfo recreated:', !!drunkDriverModelRef.bufferInfo);
+            console.log('  - VAO recreated:', !!drunkDriverModelRef.vao);
+        } else {
+            console.error('❌ TRANSFORMATION FAILED: Arrays not accessible');
+        }
+
+        console.log('✅ Drunk driver model loaded and transformed successfully');
+    } catch (error) {
+        console.error('Error loading drunk driver model:', error);
+        console.log('Using cube model as fallback for drunk drivers');
     }
 }
 
@@ -231,12 +357,12 @@ function setupScene() {
 
     // Setup lighting
     // Patrón de CG-2025.base_lighting.setupScene()
-    // Valores reducidos para iluminacion mas suave
+    // Luz blanca para iluminacion neutral
     let light = new Light3D(0,
         [15, 20, 15],              // Position
-        [0.15, 0.15, 0.15, 1.0],   // Ambient (reducido)
-        [0.5, 0.5, 0.5, 1.0],      // Diffuse (reducido)
-        [0.3, 0.3, 0.3, 1.0]);     // Specular (reducido)
+        [1.0, 1.0, 1.0, 1.0],      // Ambient (blanco)
+        [1.0, 1.0, 1.0, 1.0],      // Diffuse (blanco)
+        [1.0, 1.0, 1.0, 1.0]);     // Specular (blanco)
     scene.addLight(light);
 }
 
@@ -246,8 +372,6 @@ function setupObjects(scene, gl, programInfo) {
     const baseCube = new Object3D(-1);
     baseCube.prepareVAO(gl, programInfo);
     baseCubeRef = baseCube;
-
-    // Ya no creamos coche de prueba porque el modelo funciona correctamente
 
     // Setup roads (gray ground)
     // Escala 0.5 porque el cubo base tiene 2 unidades (de -1 a 1) y las celdas son de 1 unidad
@@ -295,11 +419,15 @@ function setupObjects(scene, gl, programInfo) {
             obstacle.bufferInfo = buildingModel.bufferInfo;
             obstacle.vao = buildingModel.vao;
             obstacle.scale = { x: 0.45, y: 0.45, z: 0.45 }; // Escala para modelos OBJ
+            // Offset upward to show floor beneath
+            obstacle.position.y += 0.05;
         } else {
             obstacle.arrays = baseCube.arrays;
             obstacle.bufferInfo = baseCube.bufferInfo;
             obstacle.vao = baseCube.vao;
             obstacle.scale = { x: 0.45, y: 1.5, z: 0.45 };
+            // Offset upward to show floor beneath
+            obstacle.position.y += 0.75;
         }
         obstacle.color = [0.6, 0.6, 0.7, 1.0];  // Light gray/blue
         scene.addObject(obstacle);
@@ -340,20 +468,38 @@ function setupObjects(scene, gl, programInfo) {
     // Al inicio puede que no haya coches pero se iran agregando durante la simulacion
     // Escala 0.25 para mantener proporcion correcta con el cubo base de 2 unidades
     for (const car of cars) {
-        // Usar el modelo de coche si se cargo correctamente sino usar un cubo
-        if (carModelRef) {
+        // Usar drunk driver model para drunk drivers, modelo normal para coches normales
+        if (car.type === 'drunk' && drunkDriverModelRef) {
+            console.log('🍺 Assigning drunk driver model to car:', car.id);
+            console.log('  - Using drunkDriverModelRef with', drunkDriverModelRef.arrays.a_position?.data?.length / 3, 'vertices');
+            console.log('  - First 10 vertices from ref:', drunkDriverModelRef.arrays.a_position?.data?.slice(0, 30));
+            car.arrays = drunkDriverModelRef.arrays;
+            car.bufferInfo = drunkDriverModelRef.bufferInfo;
+            car.vao = drunkDriverModelRef.vao;
+            car.scale = { x: 0.25, y: 0.25, z: 0.25 };
+        } else if (carModelRef) {
             car.arrays = carModelRef.arrays;
             car.bufferInfo = carModelRef.bufferInfo;
             car.vao = carModelRef.vao;
-            car.scale = { x: 0.25, y: 0.25, z: 0.25 }; // Escala ajustada para el modelo 3D
+            car.scale = { x: 0.25, y: 0.25, z: 0.25 };
         } else {
             car.arrays = baseCube.arrays;
             car.bufferInfo = baseCube.bufferInfo;
             car.vao = baseCube.vao;
             car.scale = { x: 0.3, y: 0.2, z: 0.2 };
         }
-        // Cada coche tiene un color aleatorio para distinguirlos
-        car.color = [Math.random(), Math.random(), Math.random(), 1.0];
+
+        // Color especial para drunk drivers (rojo si crasheó)
+        if (car.type === 'drunk') {
+            car.color = car.crashed ? [1.0, 0.0, 0.0, 1.0] : [0.8, 0.8, 0.0, 1.0]; // Amarillo o rojo
+        } else {
+            car.color = [Math.random(), Math.random(), Math.random(), 1.0];
+        }
+
+        // Guardar posicion inicial para interpolacion
+        car.startPos = { x: car.position.x, y: car.position.y, z: car.position.z };
+        car.targetPos = { x: car.position.x, y: car.position.y, z: car.position.z };
+
         scene.addObject(car);
     }
 }
@@ -389,19 +535,25 @@ function getTrafficLightUniforms() {
 
 // Preparar arrays de posiciones de coches para el shader
 // Patron de getTrafficLightUniforms
-function getCarUniforms() {
+function getCarUniforms(fract) {
     const positions = [];
     const numCars = Math.min(cars.length, MAX_CARS);
 
     for (let i = 0; i < MAX_CARS; i++) {
         if (i < cars.length) {
             const car = cars[i];
-            // Usar la posicion del coche
-            // Mismo patron que semaforos
-            positions.push(car.position.x, car.position.y, car.position.z);
+            // Interpolar posicion de luz igual que la posicion del coche
+            if (car.startPos && car.targetPos) {
+                const x = car.startPos.x + (car.targetPos.x - car.startPos.x) * fract;
+                const y = car.startPos.y + (car.targetPos.y - car.startPos.y) * fract;
+                const z = car.startPos.z + (car.targetPos.z - car.startPos.z) * fract;
+                positions.push(x, y, z);
+            } else {
+                positions.push(car.position.x, car.position.y, car.position.z);
+            }
         } else {
-            // Llenar con ceros para los slots no usados
-            positions.push(0, 0, 0);
+            // Llenar con posiciones muy lejanas para no afectar iluminacion
+            positions.push(1000.0, 1000.0, 1000.0);
         }
     }
 
@@ -462,7 +614,7 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
 
     // Obtener uniforms de luces de semaforos y coches
     const trafficLightUniforms = getTrafficLightUniforms();
-    const carUniforms = getCarUniforms();
+    const carUniforms = getCarUniforms(fract);
 
     // Uniforms del modelo para el shader de Phong
     // Estos valores se pasan al shader para calcular la iluminacion
@@ -489,15 +641,22 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
 
 // Dibujar un coche con su modelo 3D
 function drawCar(gl, programInfo, car, viewProjectionMatrix, fract) {
+    // Interpolacion de posicion usando delta time (fract va de 0 a 1)
+    // Lerp entre startPos y targetPos
+    if (car.startPos && car.targetPos) {
+        car.position.x = car.startPos.x + (car.targetPos.x - car.startPos.x) * fract;
+        car.position.y = car.startPos.y + (car.targetPos.y - car.startPos.y) * fract;
+        car.position.z = car.startPos.z + (car.targetPos.z - car.startPos.z) * fract;
+    }
+
     // Actualizar rotacion del coche segun su direccion de movimiento
     if (car.direction) {
         car.rotRad.y = getRotationFromDirection(car.direction);
-        // Debug: log primeros 3 coches para ver si funciona
-        if (car.id && car.id.toString().endsWith('0')) {
-            console.log(`Car ${car.id}: direction=${car.direction}, rotY=${car.rotRad.y}`);
-        }
-    } else {
-        console.log(`Car ${car.id}: NO DIRECTION`);
+    }
+
+    // Si es drunk driver y crasheó, actualizar color a rojo
+    if (car.type === 'drunk' && car.crashed) {
+        car.color = [1.0, 0.0, 0.0, 1.0];
     }
 
     // Dibujar el cuerpo del coche usando el modelo 3D cargado
@@ -577,20 +736,23 @@ async function drawScene() {
 
     // Ya no animamos el coche de prueba porque lo quitamos
 
-    // Actualizar dropdown de coches disponibles
+    // Actualizar dropdown de coches disponibles - SOLO drunk drivers
     if (window.carIdController && cars.length > 0) {
-        const currentCarIds = cars.map(c => c.id);
-        const dropdownOptions = ['None', ...currentCarIds];
+        // Filtrar solo drunk drivers
+        const drunkDrivers = cars.filter(c => c.type === 'drunk');
+        const drunkDriverIds = drunkDrivers.map(c => c.id);
+        const dropdownOptions = ['None', ...drunkDriverIds];
 
-        // Solo actualizar si cambio el numero de coches
-        if (!window.lastCarCount || window.lastCarCount !== cars.length) {
+        // Solo actualizar si cambio el numero de drunk drivers
+        const drunkCount = drunkDrivers.length;
+        if (!window.lastDrunkCount || window.lastDrunkCount !== drunkCount) {
             // Destruir el controller viejo
             window.carIdController.destroy();
 
             // Crear uno nuevo con las opciones actualizadas
             const cameraFolder = window.carIdController.parent;
             window.carIdController = cameraFolder.add(window.cameraControls, 'carId', dropdownOptions)
-                .name('Car ID')
+                .name('Drunk Driver ID')
                 .onChange((carId) => {
                     if (carId === 'None') {
                         scene.camera.followTarget = null;
@@ -606,7 +768,7 @@ async function drawScene() {
                     }
                 });
 
-            window.lastCarCount = cars.length;
+            window.lastDrunkCount = drunkCount;
         }
     }
 
@@ -621,8 +783,14 @@ async function drawScene() {
     // Escala 0.25 para mantener proporcion correcta con el cubo base de 2 unidades
     for (const car of cars) {
         if (!scene.objects.includes(car)) {
-            // Usar el modelo de coche si se cargo correctamente sino usar un cubo
-            if (carModelRef) {
+            // Usar drunk driver model para drunk drivers, modelo normal para coches normales
+            if (car.type === 'drunk' && drunkDriverModelRef) {
+                console.log('🍺 [DYNAMIC] Assigning drunk driver model to new car:', car.id);
+                car.arrays = drunkDriverModelRef.arrays;
+                car.bufferInfo = drunkDriverModelRef.bufferInfo;
+                car.vao = drunkDriverModelRef.vao;
+                car.scale = { x: 0.25, y: 0.25, z: 0.25 };
+            } else if (carModelRef) {
                 car.arrays = carModelRef.arrays;
                 car.bufferInfo = carModelRef.bufferInfo;
                 car.vao = carModelRef.vao;
@@ -633,8 +801,18 @@ async function drawScene() {
                 car.vao = baseCubeRef.vao;
                 car.scale = { x: 0.3, y: 0.2, z: 0.2 };
             }
-            // Color aleatorio para cada coche nuevo
-            car.color = [Math.random(), Math.random(), Math.random(), 1.0];
+
+            // Color especial para drunk drivers
+            if (car.type === 'drunk') {
+                car.color = car.crashed ? [1.0, 0.0, 0.0, 1.0] : [0.8, 0.8, 0.0, 1.0];
+            } else {
+                car.color = [Math.random(), Math.random(), Math.random(), 1.0];
+            }
+
+            // Inicializar posiciones para interpolacion
+            car.startPos = { x: car.position.x, y: car.position.y, z: car.position.z };
+            car.targetPos = { x: car.position.x, y: car.position.y, z: car.position.z };
+
             scene.addObject(car);
         }
     }
@@ -680,7 +858,25 @@ async function drawScene() {
     // Update the scene after the elapsed duration
     if (elapsed >= duration) {
         elapsed = 0;
+
+        // Guardar posiciones actuales como startPos antes del update
+        for (const car of cars) {
+            if (car.startPos && car.targetPos) {
+                car.startPos.x = car.targetPos.x;
+                car.startPos.y = car.targetPos.y;
+                car.startPos.z = car.targetPos.z;
+            }
+        }
+
         await update();
+
+        // Actualizar targetPos con las nuevas posiciones del servidor
+        for (const car of cars) {
+            if (!car.startPos) {
+                car.startPos = { x: car.position.x, y: car.position.y, z: car.position.z };
+            }
+            car.targetPos = { x: car.position.x, y: car.position.y, z: car.position.z };
+        }
     }
 
     requestAnimationFrame(drawScene);
@@ -768,6 +964,22 @@ function setupUI() {
         .name('Distance')
         .onChange((value) => {
             scene.camera.followDistance = value;
+        });
+
+    // Simulation speed controls
+    const simulationFolder = gui.addFolder('Simulation:')
+
+    // Objeto para controlar velocidad de simulacion
+    const simulationControls = {
+        updateSpeed: 1000 // Valor inicial en ms
+    };
+
+    // Slider para controlar velocidad de actualizacion
+    // Rango de 100ms (rapido) a 2000ms (lento)
+    simulationFolder.add(simulationControls, 'updateSpeed', 100, 2000)
+        .name('Update Speed (ms)')
+        .onChange((value) => {
+            duration = value;
         });
 
     // Guardar referencia para actualizar el dropdown
