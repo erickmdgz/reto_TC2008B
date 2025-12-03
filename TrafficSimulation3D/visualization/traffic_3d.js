@@ -18,8 +18,9 @@ import { Camera3D } from './libs/camera3d';
 // Functions and arrays for API communication
 import {
     cars, trafficLights, obstacles, roads, destinations,
+    drunkDriverParams,
     initTrafficModel, update, getCars, getTrafficLights,
-    getObstacles, getRoads, getDestinations
+    getObstacles, getRoads, getDestinations, updateDrunkParams
 } from './libs/api_connection.js';
 
 // Define the shader code, using GLSL 3.00
@@ -983,6 +984,44 @@ function setupUI() {
         .name('Update Speed (ms)')
         .onChange((value) => {
             duration = value;
+        });
+
+    // Drunk Driver controls folder
+    const drunkFolder = gui.addFolder('Drunk Driver:')
+
+    drunkFolder.add(drunkDriverParams, 'drunk_crash_prob', 0, 1)
+        .name('Crash Probability')
+        .step(0.05)
+        .onChange((value) => {
+            updateDrunkParams({ drunk_crash_prob: value });
+        });
+
+    drunkFolder.add(drunkDriverParams, 'drunk_ignore_light_prob', 0, 1)
+        .name('Ignore Lights Prob')
+        .step(0.05)
+        .onChange((value) => {
+            updateDrunkParams({ drunk_ignore_light_prob: value });
+        });
+
+    drunkFolder.add(drunkDriverParams, 'drunk_wrong_way_prob', 0, 1)
+        .name('Wrong Way Prob')
+        .step(0.05)
+        .onChange((value) => {
+            updateDrunkParams({ drunk_wrong_way_prob: value });
+        });
+
+    drunkFolder.add(drunkDriverParams, 'drunk_forget_route_prob', 0, 1)
+        .name('Forget Route Prob')
+        .step(0.05)
+        .onChange((value) => {
+            updateDrunkParams({ drunk_forget_route_prob: value });
+        });
+
+    drunkFolder.add(drunkDriverParams, 'drunk_zigzag_intensity', 0, 1)
+        .name('Zigzag Intensity')
+        .step(0.05)
+        .onChange((value) => {
+            updateDrunkParams({ drunk_zigzag_intensity: value });
         });
 
     // Guardar referencia para actualizar el dropdown
