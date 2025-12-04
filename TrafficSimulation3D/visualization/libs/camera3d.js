@@ -56,6 +56,12 @@ class Camera3D {
         this.followMode = false;
         this.followTarget = null; // Objeto a seguir (coche)
         this.followDistance = 15; // Distancia desde el coche
+        this.followInitialized = false; // Para saber si ya se inicializo la vista
+
+        // Variables para interpolacion suave del target en follow mode
+        this.smoothTargetX = 0;
+        this.smoothTargetY = 0;
+        this.smoothTargetZ = 0;
     }
 
     // Return the current position of the camera as an array of 3 floats
@@ -128,17 +134,35 @@ class Camera3D {
             // Obtener posicion del objeto a seguir
             const targetPos = this.followTarget.posArray;
 
-            // Actualizar el target de la camara a la posicion del coche
-            this.target.x = targetPos[0];
-            this.target.y = targetPos[1];
-            this.target.z = targetPos[2];
+            // Solo establecer posicion inicial una vez
+            if (!this.followInitialized) {
+                this.smoothTargetX = targetPos[0];
+                this.smoothTargetY = targetPos[1];
+                this.smoothTargetZ = targetPos[2];
+                this.elevation = Math.PI / 4; // 45 grados vista diagonal
+                this.azimuth = 0;
+                this.followInitialized = true;
+            }
+
+            // Interpolar suavemente hacia la posicion del coche (factor bajo para suavidad)
+            const lerpFactor = 0.08;
+            this.smoothTargetX += (targetPos[0] - this.smoothTargetX) * lerpFactor;
+            this.smoothTargetY += (targetPos[1] - this.smoothTargetY) * lerpFactor;
+            this.smoothTargetZ += (targetPos[2] - this.smoothTargetZ) * lerpFactor;
+
+            // Actualizar el target de la camara con la posicion suavizada
+            this.target.x = this.smoothTargetX;
+            this.target.y = this.smoothTargetY;
+            this.target.z = this.smoothTargetZ;
 
             // Resetear el pan offset para que siga limpiamente
             this.panOffset = [0, 0, 0];
 
-            // Ajustar distancia y elevacion para vista top-down (desde arriba)
+            // Ajustar distancia
             this.distance = this.followDistance;
-            this.elevation = Math.PI / 2 - 0.1; // Casi 90 grados (vista desde arriba)
+        } else {
+            // Resetear cuando se desactiva follow mode
+            this.followInitialized = false;
         }
     }
 
