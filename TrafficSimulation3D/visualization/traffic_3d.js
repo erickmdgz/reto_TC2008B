@@ -351,32 +351,17 @@ async function loadTrafficLightModel(gl, programInfo) {
 // Load skybox as 6 walls forming a cube room
 async function loadSkybox(gl, programInfo) {
     try {
-        // Load Manhattan texture
+        // Load webp skybox texture for all walls
         const img = await new Promise((resolve, reject) => {
             const image = new Image();
             image.onload = () => resolve(image);
             image.onerror = reject;
-            image.src = '/midtown-de-manhattan-de-nueva-york-en-la-oscuridad.jpg';
+            image.src = '/236449-825-auto.webp';
         });
 
-        const manhattanTexture = twgl.createTexture(gl, {
+        const skyboxTexture = twgl.createTexture(gl, {
             src: img,
             wrap: gl.CLAMP_TO_EDGE,
-            min: gl.LINEAR,
-            mag: gl.LINEAR
-        });
-
-        // Load aerial view for floor
-        const aerialImg = await new Promise((resolve, reject) => {
-            const image = new Image();
-            image.onload = () => resolve(image);
-            image.onerror = reject;
-            image.src = '/top-down-aerial-view-textured-footage-135944431_iconl.jpeg';
-        });
-
-        const aerialTexture = twgl.createTexture(gl, {
-            src: aerialImg,
-            wrap: gl.REPEAT,
             min: gl.LINEAR,
             mag: gl.LINEAR
         });
@@ -385,20 +370,20 @@ async function loadSkybox(gl, programInfo) {
         const center = [15, 15, 15];
         const distance = 100;
 
-        // Store all skybox walls with texture (cube approach)
+        // Store all skybox walls with texture (cube approach) - all using webp with dark filter
         const walls = [
             // Back wall (North - positive Z) - darker
-            { id: -991, pos: [center[0], center[1], center[2] + distance], rot: [0, 0, 0], texture: manhattanTexture, color: [0.6, 0.6, 0.7, 1] },
+            { id: -991, pos: [center[0], center[1], center[2] + distance], rot: [0, 0, 0], texture: skyboxTexture, color: [0.6, 0.6, 0.7, 1] },
             // Front wall (South - negative Z) - darker
-            { id: -992, pos: [center[0], center[1], center[2] - distance], rot: [0, 0, 0], texture: manhattanTexture, color: [0.6, 0.6, 0.7, 1] },
+            { id: -992, pos: [center[0], center[1], center[2] - distance], rot: [0, 0, 0], texture: skyboxTexture, color: [0.6, 0.6, 0.7, 1] },
             // Left wall (West - negative X) - darker
-            { id: -993, pos: [center[0] - distance, center[1], center[2]], rot: [0, 90, 0], texture: manhattanTexture, color: [0.6, 0.6, 0.7, 1] },
+            { id: -993, pos: [center[0] - distance, center[1], center[2]], rot: [0, 90, 0], texture: skyboxTexture, color: [0.6, 0.6, 0.7, 1] },
             // Right wall (East - positive X) - darker
-            { id: -994, pos: [center[0] + distance, center[1], center[2]], rot: [0, 90, 0], texture: manhattanTexture, color: [0.6, 0.6, 0.7, 1] },
+            { id: -994, pos: [center[0] + distance, center[1], center[2]], rot: [0, 90, 0], texture: skyboxTexture, color: [0.6, 0.6, 0.7, 1] },
             // Top wall (ceiling) - darker
-            { id: -995, pos: [center[0], center[1] + distance, center[2]], rot: [90, 0, 0], texture: manhattanTexture, color: [0.6, 0.6, 0.7, 1] },
-            // Bottom wall (floor) - aerial view with dark blue/purple tint
-            { id: -996, pos: [center[0], center[1] - distance, center[2]], rot: [90, 0, 0], texture: aerialTexture, color: [0.3, 0.2, 0.4, 1] }
+            { id: -995, pos: [center[0], center[1] + distance, center[2]], rot: [90, 0, 0], texture: skyboxTexture, color: [0.6, 0.6, 0.7, 1] },
+            // Bottom wall (floor) - webp with dark filter
+            { id: -996, pos: [center[0], center[1] - distance, center[2]], rot: [90, 0, 0], texture: skyboxTexture, color: [0.6, 0.6, 0.7, 1] }
         ];
 
         for (const wallData of walls) {
