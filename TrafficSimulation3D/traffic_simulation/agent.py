@@ -125,10 +125,9 @@ class Car(CellAgent):
                     0 <= next_y < self.model.grid.dimensions[1]):
                     next_cell = self.model.grid[(next_x, next_y)]
 
-                    has_car = any(isinstance(agent, Car) for agent in next_cell.agents if agent != self)
                     has_obstacle = any(isinstance(agent, Obstacle) for agent in next_cell.agents)
 
-                    if has_car or has_obstacle:
+                    if has_obstacle:
                         continue
 
                     # busca si hay una calle o semáforo
@@ -158,10 +157,9 @@ class Car(CellAgent):
                     0 <= next_y < self.model.grid.dimensions[1]):
                     next_cell = self.model.grid[(next_x, next_y)]
 
-                    has_car = any(isinstance(agent, Car) for agent in next_cell.agents if agent != self)
                     has_obstacle = any(isinstance(agent, Obstacle) for agent in next_cell.agents)
 
-                    if has_car or has_obstacle:
+                    if has_obstacle:
                         return neighbors
 
                     # puedes moverte a cualquier celda válida (calle, destino, semáforo)
@@ -187,13 +185,17 @@ class Car(CellAgent):
                     next_cell = self.model.grid[(next_x, next_y)]
 
                     has_obstacle = any(isinstance(agent, Obstacle) for agent in next_cell.agents)
-                    has_car = any(isinstance(agent, Car) for agent in next_cell.agents if agent != self)
 
-                    if not has_obstacle and not has_car:
-                        # puedes ir a calles, destinos o semáforos
-                        has_valid_path = any(isinstance(agent, (Road, Destination, Traffic_Light)) for agent in next_cell.agents)
-                        if has_valid_path:
+                    if not has_obstacle:
+                        # Verificar si hay destino (siempre válido)
+                        has_destination = any(isinstance(agent, Destination) for agent in next_cell.agents)
+                        if has_destination:
                             neighbors.append(next_cell)
+                        else:
+                            # Si es calle/semáforo, validar que tenga dirección compatible
+                            road_agent = self.get_road_at(next_cell)
+                            if road_agent and road_agent.direction == direction:
+                                neighbors.append(next_cell)
 
             # Permitir doblar en intersecciones: puedes entrar a una calle perpendicular
             # siempre que NO vayas en contra de su flujo
@@ -216,9 +218,8 @@ class Car(CellAgent):
                     next_cell = self.model.grid[(next_x, next_y)]
 
                     has_obstacle = any(isinstance(agent, Obstacle) for agent in next_cell.agents)
-                    has_car = any(isinstance(agent, Car) for agent in next_cell.agents if agent != self)
 
-                    if has_obstacle or has_car:
+                    if has_obstacle:
                         continue
 
                     road_agent = self.get_road_at(next_cell)
@@ -234,10 +235,10 @@ class Car(CellAgent):
                             # Cambio de carril permitido
                             if next_cell not in neighbors:
                                 neighbors.append(next_cell)
-                        # Permitir doblar a una calle SI NO vas en dirección opuesta a su flujo
-                        # Ejemplo: si la calle va Right, NO puedes entrar desde la derecha (irías contra flujo)
-                        elif road_agent.direction != opposite_dirs.get(dir_name):
-                            # No estás yendo contra el flujo, puedes entrar (doblar en intersección)
+                        # Permitir doblar a una calle SI su dirección coincide con el movimiento
+                        # Ejemplo: si voy "Down", la calle destino debe ser "Down"
+                        elif road_agent.direction == dir_name:
+                            # Giro válido: la calle destino fluye en la misma dirección del movimiento
                             if next_cell not in neighbors:
                                 neighbors.append(next_cell)
 
@@ -262,7 +263,7 @@ class Car(CellAgent):
         self.waiting_at_light = False
 
         # Verificar si hay otro carro en la siguiente celda
-        has_car = any(isinstance(agent, Car) for agent in next_cell.agents)
+        has_car = any(isinstance(agent, Car) for agent in next_cell.agents if agent != self)
         if has_car:
             return False
 
@@ -272,46 +273,62 @@ class Car(CellAgent):
         """
         Moves one step along the calculated path.
         Actualiza la dirección del coche según el movimiento realizado.
+
+        FLUJO CORREGIDO:
+        1. Verificar si hay path
+        2. Verificar semáforo en rojo -> esperar
+        3. Verificar si hay coche adelante
+        4. Si hay coche: intentar chocar (con probabilidad), luego esperar
+        5. Si no hay coche: moverse
         """
         if not self.path:
             self.path = self.find_path_to_destination()
 
-        if self.path and self.can_move_forward():
-            next_cell = self.path.pop(0)
-
-            # Verificar colisión con probabilidad de choque
-            has_car = any(isinstance(agent, Car) for agent in next_cell.agents if agent != self)
-            if has_car and self.model.random.random() < self.crash_prob:
-                self.crashed = True
-                self.crash_recovery_steps = 10
-                return False
-
-            old_x, old_y = self.cell.coordinate
-            new_x, new_y = next_cell.coordinate
-
-            # Actualizar posición
-            self.cell = next_cell
-
-            # Actualizar dirección basado en el movimiento real
-            dx = new_x - old_x
-            dy = new_y - old_y
-
-            if dx > 0:
-                self.direction = "Right"
-            elif dx < 0:
-                self.direction = "Left"
-            elif dy > 0:
-                self.direction = "Up"
-            elif dy < 0:
-                self.direction = "Down"
-
-            return True
-
-        # Si no hay ruta, seguir en la dirección del camino
         if not self.path:
             return self.continue_in_road_direction()
 
-        return False
+        next_cell = self.path[0]
+
+        # 1. Verificar semáforo en rojo en celda actual
+        traffic_lights = [agent for agent in self.cell.agents if isinstance(agent, Traffic_Light)]
+        if traffic_lights and not traffic_lights[0].state:
+            self.waiting_at_light = True
+            return False
+        self.waiting_at_light = False
+
+        # 2. Verificar si hay coche adelante
+        has_car = any(isinstance(agent, Car) for agent in next_cell.agents if agent != self)
+
+        if has_car:
+            # 3. Intentar chocar (con probabilidad)
+            if self.crash_prob > 0 and self.model.random.random() < self.crash_prob:
+                self.crashed = True
+                self.crash_recovery_steps = 10
+            # No se mueve (chocó o está esperando)
+            return False
+
+        # 4. Moverse
+        self.path.pop(0)
+        old_x, old_y = self.cell.coordinate
+        new_x, new_y = next_cell.coordinate
+
+        # Actualizar posición
+        self.cell = next_cell
+
+        # Actualizar dirección basado en el movimiento real
+        dx = new_x - old_x
+        dy = new_y - old_y
+
+        if dx > 0:
+            self.direction = "Right"
+        elif dx < 0:
+            self.direction = "Left"
+        elif dy > 0:
+            self.direction = "Up"
+        elif dy < 0:
+            self.direction = "Down"
+
+        return True
 
     def continue_in_road_direction(self):
         """
@@ -358,6 +375,12 @@ class Car(CellAgent):
             return False
 
         self.waiting_at_light = False
+
+        # Verificar que la siguiente celda tenga una calle válida
+        has_valid_road = any(isinstance(agent, (Road, Destination, Traffic_Light))
+                            for agent in next_cell.agents)
+        if not has_valid_road:
+            return False
 
         # Moverse en la dirección del camino
         self.cell = next_cell
@@ -615,45 +638,66 @@ class drunkDriver(Car):
                     self.direction = new_direction
         else:
             # Seguir path normal
+            # FLUJO CORREGIDO:
+            # 1. Verificar si hay path
+            # 2. Verificar semáforo (con posibilidad de ignorar)
+            # 3. Verificar si hay coche/obstáculo adelante
+            # 4. Si hay: intentar chocar, luego esperar
+            # 5. Si no hay: moverse
+
             if not self.path:
                 self.path = self.find_path_to_destination()
 
-            # Siempre avanza 1 celda (speeding eliminado)
-            if self.path and self.can_move_forward_drunk():
-                next_cell = self.path.pop(0)
+            if not self.path:
+                return
 
-                has_obstacle = any(isinstance(agent, Obstacle) for agent in next_cell.agents)
-                if has_obstacle:
-                    if self.model.random.random() < self.crash_prob:
-                        self.crashed = True
-                        self.crash_recovery_steps = 10
+            next_cell = self.path[0]
+
+            # Verificar semáforo (con posibilidad de ignorar)
+            traffic_lights = [agent for agent in self.cell.agents if isinstance(agent, Traffic_Light)]
+            if traffic_lights and not traffic_lights[0].state:
+                if self.model.random.random() >= self.ignore_light_prob:
+                    self.waiting_at_light = True
                     return
+            self.waiting_at_light = False
 
-                has_car = any(isinstance(agent, Car) for agent in next_cell.agents if agent != self)
-                if has_car:
-                    if self.model.random.random() < self.crash_prob:
-                        self.crashed = True
-                        self.crash_recovery_steps = 10
-                    return
+            # Verificar obstáculo adelante
+            has_obstacle = any(isinstance(agent, Obstacle) for agent in next_cell.agents)
+            if has_obstacle:
+                if self.crash_prob > 0 and self.model.random.random() < self.crash_prob:
+                    self.crashed = True
+                    self.crash_recovery_steps = 10
+                return
 
-                # Aplicar zigzag
-                next_cell = self.apply_zigzag(next_cell)
+            # Verificar coche adelante
+            has_car = any(isinstance(agent, Car) for agent in next_cell.agents if agent != self)
+            if has_car:
+                if self.crash_prob > 0 and self.model.random.random() < self.crash_prob:
+                    self.crashed = True
+                    self.crash_recovery_steps = 10
+                return
 
-                old_x, old_y = self.cell.coordinate
-                new_x, new_y = next_cell.coordinate
-                self.cell = next_cell
+            # Moverse
+            self.path.pop(0)
 
-                dx = new_x - old_x
-                dy = new_y - old_y
+            # Aplicar zigzag
+            next_cell = self.apply_zigzag(next_cell)
 
-                if dx > 0:
-                    self.direction = "Right"
-                elif dx < 0:
-                    self.direction = "Left"
-                elif dy > 0:
-                    self.direction = "Up"
-                elif dy < 0:
-                    self.direction = "Down"
+            old_x, old_y = self.cell.coordinate
+            new_x, new_y = next_cell.coordinate
+            self.cell = next_cell
+
+            dx = new_x - old_x
+            dy = new_y - old_y
+
+            if dx > 0:
+                self.direction = "Right"
+            elif dx < 0:
+                self.direction = "Left"
+            elif dy > 0:
+                self.direction = "Up"
+            elif dy < 0:
+                self.direction = "Down"
 
 
 class Road(FixedAgent):
