@@ -3,6 +3,7 @@ from mesa.datacollection import DataCollector
 from mesa.discrete_space import OrthogonalMooreGrid
 from .agent import Car, Traffic_Light, Destination, Obstacle, Road, drunkDriver
 import json
+import requests
 
 class CityModel(Model):
     """
@@ -15,7 +16,11 @@ class CityModel(Model):
                  normal_spawn_ratio=0.75, normal_crash_prob=0.0,
                  # Parámetros de drunk drivers
                  drunk_crash_prob=0.5, drunk_ignore_light_prob=0.3,
-                 drunk_forget_route_prob=0.15, drunk_zigzag_intensity=0.0):
+                 drunk_forget_route_prob=0.15, drunk_zigzag_intensity=0.0,
+                 # Parámetros de API
+                 api_url="http://10.49.12.39:5000/api/",
+                 team_year=2025, team_classroom=301, team_name="Don July Seventy",
+                 enable_api=True):
         super().__init__(seed=seed)
 
         # Load the map dictionary
@@ -29,6 +34,14 @@ class CityModel(Model):
         self.cars_spawned = 0
         self.cars_reached_destination = 0
         self.spawn_interval = spawn_interval  # Spawn a car every N steps
+
+        # Parámetros de API
+        self.api_url = api_url
+        self.team_year = team_year
+        self.team_classroom = team_classroom
+        self.team_name = team_name
+        self.enable_api = enable_api
+        self.api_send_interval = 5  # Enviar datos cada 5 steps
 
         # Parámetros de coches normales controlados por sliders
         self.normal_spawn_ratio = normal_spawn_ratio  # 0.0-1.0 (0.75 = 75% normales)
@@ -200,6 +213,46 @@ class CityModel(Model):
                 return True
         return False
 
+    def send_data_to_api(self):
+        """
+        Envía los datos de la simulación al API de competencia.
+        El campo attempt_number será la frecuencia de spawn (spawn_interval).
+        """
+        if not self.enable_api:
+            return
+
+        try:
+            endpoint = "attempt"
+            data = {
+                "year": int(self.team_year),
+                "classroom": int(self.team_classroom),
+                "name": str(self.team_name),
+                "current_cars": int(len(self.cars)),
+                "total_arrived": int(self.cars_reached_destination),
+                "attempt_number": int(self.spawn_interval)
+            }
+
+            print(f"[API] Enviando datos: {data}")
+
+            headers = {
+                "Content-Type": "application/json"
+            }
+
+            response = requests.post(
+                self.api_url + endpoint,
+                json=data,
+                headers=headers,
+                timeout=5
+            )
+
+            if response.status_code == 200:
+                print(f"[API] Step {self.steps_count}: Datos enviados exitosamente - Cars: {len(self.cars)}, Arrived: {self.cars_reached_destination}")
+            else:
+                print(f"[API] Step {self.steps_count}: Error al enviar datos - Status: {response.status_code}, Response: {response.json()}")
+
+        except requests.exceptions.RequestException as e:
+            print(f"[API] Step {self.steps_count}: Error de conexión - {str(e)}")
+
     def step(self):
         """
         Advance the model by one step.
@@ -222,6 +275,10 @@ class CityModel(Model):
         # Patrón de roombaSimulation2 para actualizar listas de agentes
         self.cars = [car for car in self.cars if car in self.agents]
         self.cars_reached_destination = self.cars_spawned - len(self.cars)
+
+        # Enviar datos al API cada 5 steps
+        if self.steps_count % self.api_send_interval == 0:
+            self.send_data_to_api()
 
         # Stop if no more cars can be spawned and all cars have reached destination
         if not self.can_spawn_more_cars() and len(self.cars) == 0:

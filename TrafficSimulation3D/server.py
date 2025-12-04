@@ -43,7 +43,16 @@ def initModel():
         drunk_forget_route_prob = data.get('drunk_forget_route_prob', 0.15)
         drunk_zigzag_intensity = data.get('drunk_zigzag_intensity', 0.0)
 
+        # Parámetros de API
+        api_url = data.get('api_url', 'http://10.49.12.39:5000/api/')
+        team_year = data.get('team_year', 2024)
+        team_classroom = data.get('team_classroom', 301)
+        team_name = data.get('team_name', 'equipo borracho')
+        enable_api = data.get('enable_api', True)
+
         print(f"Initializing traffic model with spawn_interval={spawn_interval}...")
+        if enable_api:
+            print(f"API enabled: {api_url} - Team: {team_name} ({team_year}/{team_classroom})")
 
         # Create the model with all parameters
         trafficModel = CityModel(
@@ -53,7 +62,12 @@ def initModel():
             drunk_crash_prob=drunk_crash_prob,
             drunk_ignore_light_prob=drunk_ignore_light_prob,
             drunk_forget_route_prob=drunk_forget_route_prob,
-            drunk_zigzag_intensity=drunk_zigzag_intensity
+            drunk_zigzag_intensity=drunk_zigzag_intensity,
+            api_url=api_url,
+            team_year=team_year,
+            team_classroom=team_classroom,
+            team_name=team_name,
+            enable_api=enable_api
         )
 
         # Return success message
