@@ -297,13 +297,20 @@ class Car(CellAgent):
         self.waiting_at_light = False
 
         # 2. Verificar si hay coche adelante
-        has_car = any(isinstance(agent, Car) for agent in next_cell.agents if agent != self)
+        other_car = None
+        for agent in next_cell.agents:
+            if isinstance(agent, Car) and agent != self:
+                other_car = agent
+                break
 
-        if has_car:
+        if other_car:
             # 3. Intentar chocar (con probabilidad)
             if self.crash_prob > 0 and self.model.random.random() < self.crash_prob:
+                # Marcar ambos coches como chocados
                 self.crashed = True
                 self.crash_recovery_steps = 10
+                other_car.crashed = True
+                other_car.crash_recovery_steps = 10
             # No se mueve (chocó o está esperando)
             return False
 
@@ -396,7 +403,8 @@ class Car(CellAgent):
         if self.crash_recovery_steps > 0:
             self.crash_recovery_steps -= 1
             if self.crash_recovery_steps == 0:
-                self.crashed = False
+                # Después del timer, el coche desaparece
+                self.remove()
             return
 
         # Si llegó al destino, marcar como completado
@@ -535,7 +543,8 @@ class drunkDriver(Car):
         if self.crash_recovery_steps > 0:
             self.crash_recovery_steps -= 1
             if self.crash_recovery_steps == 0:
-                self.crashed = False  # Se recuperó
+                # Después del timer, el coche desaparece
+                self.remove()
             return
 
         # Si llegó al destino, terminar
@@ -557,11 +566,18 @@ class drunkDriver(Car):
                         self.crash_recovery_steps = 10  # Se detiene 10 steps
                     return
                 # Verificar colisión con coche
-                has_car = any(isinstance(agent, Car) for agent in next_cell.agents if agent != self)
-                if has_car:
+                other_car = None
+                for agent in next_cell.agents:
+                    if isinstance(agent, Car) and agent != self:
+                        other_car = agent
+                        break
+                if other_car:
                     if self.model.random.random() < self.crash_prob:
+                        # Marcar ambos coches como chocados
                         self.crashed = True
                         self.crash_recovery_steps = 10  # Se detiene 10 steps
+                        other_car.crashed = True
+                        other_car.crash_recovery_steps = 10
                     return
                 self.cell = next_cell
                 if new_direction:
@@ -607,11 +623,18 @@ class drunkDriver(Car):
             return
 
         # Verificar coche adelante
-        has_car = any(isinstance(agent, Car) for agent in next_cell.agents if agent != self)
-        if has_car:
+        other_car = None
+        for agent in next_cell.agents:
+            if isinstance(agent, Car) and agent != self:
+                other_car = agent
+                break
+        if other_car:
             if self.crash_prob > 0 and self.model.random.random() < self.crash_prob:
+                # Marcar ambos coches como chocados
                 self.crashed = True
                 self.crash_recovery_steps = 10
+                other_car.crashed = True
+                other_car.crash_recovery_steps = 10
             return
 
         # Moverse
