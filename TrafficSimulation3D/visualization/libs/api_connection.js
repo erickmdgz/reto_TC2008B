@@ -29,10 +29,8 @@ const normalCarParams = {
 const drunkDriverParams = {
     drunk_crash_prob: 0.5,
     drunk_ignore_light_prob: 0.3,
-    drunk_wrong_way_prob: 0.2,
     drunk_forget_route_prob: 0.15,
-    drunk_zigzag_intensity: 0.0,
-    drunk_random_move_prob: 0.2
+    drunk_zigzag_intensity: 0.0
 };
 
 /* FUNCTIONS FOR THE INTERACTION WITH THE MESA SERVER */

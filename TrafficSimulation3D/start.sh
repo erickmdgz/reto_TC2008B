@@ -11,14 +11,14 @@ echo "======================================="
 
 # Check if .venv exists
 if [ ! -d ".venv" ]; then
-    echo "❌ Error: Virtual environment not found"
+    echo "Error: Virtual environment not found"
     echo "Run ./setup.sh first"
     exit 1
 fi
 
 # Check if node_modules exists
 if [ ! -d "visualization/node_modules" ]; then
-    echo "❌ Error: Node modules not found"
+    echo "Error: Node modules not found"
     echo "Run ./setup.sh first"
     exit 1
 fi
@@ -40,13 +40,13 @@ cd ..
 
 echo ""
 echo "======================================="
-echo "✅ Simulation is running!"
+echo "Simulation is running!"
 echo "======================================="
 echo ""
 echo "Flask server PID: $FLASK_PID"
 echo "Vite server PID: $VITE_PID"
 echo ""
-echo "🌐 Open your browser at: http://localhost:5173"
+echo "Open your browser at: http://localhost:5173"
 echo ""
 echo "Press Ctrl+C to stop both servers"
 echo "======================================="
@@ -57,7 +57,7 @@ cleanup() {
     echo ""
     echo "Stopping servers..."
     kill $FLASK_PID $VITE_PID 2>/dev/null
-    echo "✅ Servers stopped"
+    echo "Servers stopped"
     exit 0
 }
 

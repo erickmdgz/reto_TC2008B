@@ -155,12 +155,12 @@ async function loadDrunkDriverModel(gl, programInfo) {
 
         const objText = await response.text();
 
-        console.log('🚗 Drunk driver model loaded, size:', objText.length, 'characters');
+        console.log('Drunk driver model loaded, size:', objText.length, 'characters');
 
         drunkDriverModelRef = new Object3D(-50);
         drunkDriverModelRef.prepareVAO(gl, programInfo, objText);
 
-        console.log('🔍 BEFORE TRANSFORMATION:');
+        console.log('BEFORE TRANSFORMATION:');
         console.log('  - Arrays exist:', !!drunkDriverModelRef.arrays);
         console.log('  - Position data exists:', !!drunkDriverModelRef.arrays.a_position);
         console.log('  - Position data length:', drunkDriverModelRef.arrays.a_position?.data?.length);
@@ -249,15 +249,15 @@ async function loadDrunkDriverModel(gl, programInfo) {
             drunkDriverModelRef.bufferInfo = twgl.createBufferInfoFromArrays(gl, drunkDriverModelRef.arrays);
             drunkDriverModelRef.vao = twgl.createVAOFromBufferInfo(gl, programInfo, drunkDriverModelRef.bufferInfo);
 
-            console.log('🔧 AFTER TRANSFORMATION:');
+            console.log('AFTER TRANSFORMATION:');
             console.log('  - First 10 transformed vertices:', drunkDriverModelRef.arrays.a_position?.data?.slice(0, 30));
             console.log('  - BufferInfo recreated:', !!drunkDriverModelRef.bufferInfo);
             console.log('  - VAO recreated:', !!drunkDriverModelRef.vao);
         } else {
-            console.error('❌ TRANSFORMATION FAILED: Arrays not accessible');
+            console.error('TRANSFORMATION FAILED: Arrays not accessible');
         }
 
-        console.log('✅ Drunk driver model loaded and transformed successfully');
+        console.log('Drunk driver model loaded and transformed successfully');
     } catch (error) {
         console.error('Error loading drunk driver model:', error);
         console.log('Using cube model as fallback for drunk drivers');
@@ -474,7 +474,7 @@ function setupObjects(scene, gl, programInfo) {
     for (const car of cars) {
         // Usar drunk driver model para drunk drivers, modelo normal para coches normales
         if (car.type === 'drunk' && drunkDriverModelRef) {
-            console.log('🍺 Assigning drunk driver model to car:', car.id);
+            console.log('Assigning drunk driver model to car:', car.id);
             console.log('  - Using drunkDriverModelRef with', drunkDriverModelRef.arrays.a_position?.data?.length / 3, 'vertices');
             console.log('  - First 10 vertices from ref:', drunkDriverModelRef.arrays.a_position?.data?.slice(0, 30));
             car.arrays = drunkDriverModelRef.arrays;
@@ -789,7 +789,7 @@ async function drawScene() {
         if (!scene.objects.includes(car)) {
             // Usar drunk driver model para drunk drivers, modelo normal para coches normales
             if (car.type === 'drunk' && drunkDriverModelRef) {
-                console.log('🍺 [DYNAMIC] Assigning drunk driver model to new car:', car.id);
+                console.log('[DYNAMIC] Assigning drunk driver model to new car:', car.id);
                 car.arrays = drunkDriverModelRef.arrays;
                 car.bufferInfo = drunkDriverModelRef.bufferInfo;
                 car.vao = drunkDriverModelRef.vao;
@@ -1030,13 +1030,6 @@ function setupUI() {
             updateDrunkParams({ drunk_ignore_light_prob: value });
         });
 
-    drunkFolder.add(drunkDriverParams, 'drunk_wrong_way_prob', 0, 1)
-        .name('Wrong Way')
-        .step(0.05)
-        .onChange((value) => {
-            updateDrunkParams({ drunk_wrong_way_prob: value });
-        });
-
     drunkFolder.add(drunkDriverParams, 'drunk_forget_route_prob', 0, 1)
         .name('Forget Route')
         .step(0.05)
@@ -1049,13 +1042,6 @@ function setupUI() {
         .step(0.05)
         .onChange((value) => {
             updateDrunkParams({ drunk_zigzag_intensity: value });
-        });
-
-    drunkFolder.add(drunkDriverParams, 'drunk_random_move_prob', 0, 1)
-        .name('Random Move')
-        .step(0.05)
-        .onChange((value) => {
-            updateDrunkParams({ drunk_random_move_prob: value });
         });
 
     // Guardar referencia para actualizar el dropdown
