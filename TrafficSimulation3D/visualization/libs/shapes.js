@@ -375,44 +375,44 @@ function cubeTextured(size) {
                 -1, 0, 0,
             ]
         },
-        a_texCoord: {
+        a_texcoord: {
             numComponents: 2,
             data: [
-                // Front Face
-                0.0, 0.0,
-                1.0, 0.0,
-                1.0,  1.0,
-                0.0, 1.0,
-
-                // Back face
-                1.0, 0.0,
-                1.0, 1.0,
-                0.0, 1.0,
-                0.0, 0.0,
-
-                // Top face
-                0.0, 1.0,
-                0.0, 0.0,
-                1.0, 0.0,
-                1.0, 1.0,
-
-                // Bottom face
-                0.0, 0.0,
-                1.0, 0.0,
-                1.0, 1.0,
-                0.0, 1.0,
-
-                // Right face
+                // Front Face (flipped vertically)
                 0.0, 1.0,
                 1.0, 1.0,
                 1.0, 0.0,
                 0.0, 0.0,
 
-                // Left face
+                // Back face (flipped vertically)
+                1.0, 1.0,
+                1.0, 0.0,
+                0.0, 0.0,
+                0.0, 1.0,
+
+                // Top face (flipped vertically)
+                0.0, 0.0,
+                0.0, 1.0,
+                1.0, 1.0,
+                1.0, 0.0,
+
+                // Bottom face (flipped vertically)
+                0.0, 1.0,
+                1.0, 1.0,
+                1.0, 0.0,
+                0.0, 0.0,
+
+                // Right face (flipped vertically)
                 0.0, 0.0,
                 1.0, 0.0,
                 1.0, 1.0,
                 0.0, 1.0,
+
+                // Left face (flipped vertically)
+                0.0, 1.0,
+                1.0, 1.0,
+                1.0, 0.0,
+                0.0, 0.0,
             ]
         },
         indices: {
