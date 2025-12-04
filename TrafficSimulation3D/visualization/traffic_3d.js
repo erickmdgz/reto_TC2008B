@@ -539,7 +539,7 @@ function setupObjects(scene, gl, programInfo) {
             car.arrays = drunkDriverModelRef.arrays;
             car.bufferInfo = drunkDriverModelRef.bufferInfo;
             car.vao = drunkDriverModelRef.vao;
-            car.scale = { x: 0.25, y: 0.25, z: 0.25 };
+            car.scale = { x: 0.125, y: 0.125, z: 0.125 };
         } else if (carModelRef) {
             car.arrays = carModelRef.arrays;
             car.bufferInfo = carModelRef.bufferInfo;
@@ -867,7 +867,7 @@ async function drawScene() {
                 car.arrays = drunkDriverModelRef.arrays;
                 car.bufferInfo = drunkDriverModelRef.bufferInfo;
                 car.vao = drunkDriverModelRef.vao;
-                car.scale = { x: 0.25, y: 0.25, z: 0.25 };
+                car.scale = { x: 0.125, y: 0.125, z: 0.125 };
             } else if (carModelRef) {
                 car.arrays = carModelRef.arrays;
                 car.bufferInfo = carModelRef.bufferInfo;
