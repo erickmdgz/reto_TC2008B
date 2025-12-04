@@ -4,9 +4,10 @@
 // Con soporte para luces de semaforos y coches
 precision highp float;
 
-// Maximo numero de semaforos y coches
+// Maximo numero de semaforos, coches y edificios
 const int MAX_TRAFFIC_LIGHTS = 30;
 const int MAX_CARS = 50;
+const int MAX_BUILDING_LIGHTS = 80;
 
 in vec3 v_normal;
 in vec3 v_surfaceToLight;
@@ -35,6 +36,11 @@ uniform int u_numTrafficLights;
 // Car light uniforms
 uniform vec3 u_carPositions[MAX_CARS];
 uniform int u_numCars;
+
+// Building light uniforms
+uniform vec3 u_buildingLightPositions[MAX_BUILDING_LIGHTS];
+uniform vec4 u_buildingLightColors[MAX_BUILDING_LIGHTS];
+uniform int u_numBuildingLights;
 
 out vec4 outColor;
 
@@ -87,9 +93,9 @@ void main() {
         // Solo afecta si la superficie mira hacia la luz
         float diff = max(dot(normal, lightDir), 0.0);
 
-        // Contribucion de esta luz de semaforo (intensidad reducida)
+        // Contribucion de esta luz de semaforo (intensidad fuerte)
         vec4 lightColor = u_trafficLightColors[i];
-        trafficLightContribution += lightColor * baseColor * diff * attenuation * 0.3;
+        trafficLightContribution += lightColor * baseColor * diff * attenuation * 0.8;
     }
 
     // Calcular contribucion de luces de coches (luz blanca suave)
@@ -116,8 +122,30 @@ void main() {
         carLightContribution += carLightColor * baseColor * carDiff * carAttenuation * 0.8;
     }
 
-    // Final color: iluminacion principal + luces de semaforos + luces de coches
-    outColor = ambient + diffuse + specular + trafficLightContribution + carLightContribution;
+    // Calcular contribucion de luces de edificios (colores calidos aleatorios)
+    // Patron de luces de semaforos
+    vec4 buildingLightContribution = vec4(0.0);
+    for (int i = 0; i < MAX_BUILDING_LIGHTS; i++) {
+        if (i >= u_numBuildingLights) break;
+
+        // Direccion y distancia al edificio
+        vec3 toBuildingLight = u_buildingLightPositions[i] - v_worldPosition;
+        float buildingDistance = length(toBuildingLight);
+        vec3 buildingLightDir = normalize(toBuildingLight);
+
+        // Atenuacion por distancia (luz puntual mas suave que coches)
+        float buildingAttenuation = 1.0 / (1.0 + 0.3 * buildingDistance + 0.1 * buildingDistance * buildingDistance);
+
+        // Solo afecta si la superficie mira hacia la luz
+        float buildingDiff = max(dot(normal, buildingLightDir), 0.0);
+
+        // Contribucion de esta luz de edificio (intensidad cyberpunk neon)
+        vec4 buildingColor = u_buildingLightColors[i];
+        buildingLightContribution += buildingColor * baseColor * buildingDiff * buildingAttenuation * 0.25;
+    }
+
+    // Final color: iluminacion principal + luces de semaforos + luces de coches + luces de edificios
+    outColor = ambient + diffuse + specular + trafficLightContribution + carLightContribution + buildingLightContribution;
     outColor = clamp(outColor, 0.0, 1.0);
     outColor.a = u_materialColor.a;
 }

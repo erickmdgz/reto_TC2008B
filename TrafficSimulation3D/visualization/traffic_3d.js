@@ -34,6 +34,88 @@ import fsEmissionGLSL from './assets/shaders/fs_emission_301.glsl?raw';
 
 const scene = new Scene3D();
 
+// Variables para guardar posicion inicial de la camara
+// Valores exactos de setupScene()
+let initialCameraState = {
+    distance: 40,
+    azimuth: 0.8,
+    elevation: 0.5,
+    targetX: 0,
+    targetY: 0,
+    targetZ: 0,
+    panOffset: [15, 0, 15]
+};
+
+// Helper functions para el overlay de noticiero
+function showNewsOverlay() {
+    const overlay = document.getElementById('newsOverlay');
+    if (overlay) {
+        overlay.classList.remove('hidden');
+    }
+}
+
+function hideNewsOverlay() {
+    const overlay = document.getElementById('newsOverlay');
+    if (overlay) {
+        overlay.classList.add('hidden');
+    }
+}
+
+// Helper function para actualizar el GUI visualmente
+function updateGUIControllers() {
+    if (window.gui) {
+        window.gui.controllersRecursive().forEach(c => c.updateDisplay());
+    }
+}
+
+// Helper function para restaurar la camara a su posicion inicial
+function restoreCameraToInitial() {
+    scene.camera.distance = initialCameraState.distance;
+    scene.camera.azimuth = initialCameraState.azimuth;
+    scene.camera.elevation = initialCameraState.elevation;
+    scene.camera.target.x = initialCameraState.targetX;
+    scene.camera.target.y = initialCameraState.targetY;
+    scene.camera.target.z = initialCameraState.targetZ;
+    scene.camera.panOffset = [...initialCameraState.panOffset];
+    scene.camera.followMode = false;
+    scene.camera.followTarget = null;
+    scene.camera.followInitialized = false;
+}
+
+// Helper function para obtener el primer drunk driver disponible
+function getFirstAvailableDrunkDriver() {
+    const drunkDrivers = cars.filter(c => c.type === 'drunk' && !c.crashed);
+    return drunkDrivers.length > 0 ? drunkDrivers[0] : null;
+}
+
+// Helper function para cambiar a otro drunk driver cuando el actual desaparece
+function switchToAnotherDrunkDriver() {
+    const currentTarget = scene.camera.followTarget;
+    const drunkDrivers = cars.filter(c => c.type === 'drunk' && !c.crashed && c !== currentTarget);
+
+    if (drunkDrivers.length > 0) {
+        // Hay otro drunk driver disponible
+        const newTarget = drunkDrivers[0];
+        scene.camera.followTarget = newTarget;
+        scene.camera.followInitialized = false; // Resetear para nueva vista
+        if (window.cameraControls) {
+            window.cameraControls.carId = newTarget.id;
+        }
+        updateGUIControllers();
+        console.log('Switched to drunk driver:', newTarget.id);
+    } else {
+        // No hay mas drunk drivers, desactivar follow mode y restaurar camara
+        restoreCameraToInitial();
+        hideNewsOverlay();
+        if (window.cameraControls) {
+            window.cameraControls.followMode = false;
+            window.cameraControls.carId = 'None';
+        }
+        updateGUIControllers();
+        console.log('No more drunk drivers, exiting follow mode');
+    }
+}
+
 // Global variables
 let phongProgramInfo = undefined;
 let emissionProgramInfo = undefined;
@@ -64,6 +146,10 @@ let testCarRef = null;
 
 // Skybox references (multiple walls)
 let skyboxWalls = [];
+
+// Texture references for roads and buildings
+let roadTexture = null;
+let buildingTextures = [];  // Array de texturas para variedad
 
 // Main function is async to make API requests
 async function main() {
@@ -105,6 +191,9 @@ async function main() {
 
     // Load skybox
     await loadSkybox(gl, phongProgramInfo);
+
+    // Load textures for roads and buildings
+    await loadTextures(gl);
 
     // Initialize the scene
     setupScene();
@@ -350,6 +439,66 @@ async function loadTrafficLightModel(gl, programInfo) {
     }
 }
 
+// Load textures for roads and buildings
+// Patron de loadSkybox
+async function loadTextures(gl) {
+    // Cargar textura de carretera
+    try {
+        const roadImg = await new Promise((resolve, reject) => {
+            const image = new Image();
+            image.onload = () => resolve(image);
+            image.onerror = reject;
+            image.src = '/textures/road_texture.jpg';
+        });
+
+        roadTexture = twgl.createTexture(gl, {
+            src: roadImg,
+            wrap: gl.REPEAT,
+            min: gl.LINEAR_MIPMAP_LINEAR,
+            mag: gl.LINEAR
+        });
+
+        console.log('Road texture loaded successfully');
+    } catch (error) {
+        console.error('Error loading road texture:', error);
+        console.log('Roads will use solid color');
+    }
+
+    // Cargar multiples texturas de edificios (patron de buildingModelRefs)
+    const buildingTextureFiles = [
+        '/textures/building_texture_1.jpg',
+        '/textures/building_texture_2.jpg',
+        '/textures/building_texture_3.jpg',
+        '/textures/building_texture_4.jpg',
+        '/textures/building_texture_5.jpg'
+    ];
+
+    for (const textureFile of buildingTextureFiles) {
+        try {
+            const buildingImg = await new Promise((resolve, reject) => {
+                const image = new Image();
+                image.onload = () => resolve(image);
+                image.onerror = reject;
+                image.src = textureFile;
+            });
+
+            const texture = twgl.createTexture(gl, {
+                src: buildingImg,
+                wrap: gl.REPEAT,
+                min: gl.LINEAR_MIPMAP_LINEAR,
+                mag: gl.LINEAR
+            });
+
+            buildingTextures.push(texture);
+            console.log('Building texture loaded:', textureFile);
+        } catch (error) {
+            console.error('Error loading building texture:', textureFile, error);
+        }
+    }
+
+    console.log('Total building textures loaded:', buildingTextures.length);
+}
+
 // Load skybox as 6 walls forming a cube room
 async function loadSkybox(gl, programInfo) {
     try {
@@ -418,11 +567,11 @@ function setupScene() {
 
     // Setup lighting
     // Patrón de CG-2025.base_lighting.setupScene()
-    // Luz difusa y suave para iluminacion mas natural
+    // Luz sin diffuse para que las luces neon resalten
     let light = new Light3D(0,
         [15, 20, 15],              // Position
         [0.3, 0.3, 0.3, 1.0],      // Ambient (suave)
-        [0.6, 0.6, 0.6, 1.0],      // Diffuse (moderado)
+        [0.0, 0.0, 0.0, 1.0],      // Diffuse (apagado)
         [0.4, 0.4, 0.4, 1.0]);     // Specular (reducido)
     scene.addLight(light);
 }
@@ -434,14 +583,27 @@ function setupObjects(scene, gl, programInfo) {
     baseCube.prepareVAO(gl, programInfo);
     baseCubeRef = baseCube;
 
-    // Setup roads (gray ground)
+    // Create textured cube for roads and buildings (con coordenadas de textura)
+    const texturedCube = new Object3D(-1000);
+    texturedCube.prepareVAO(gl, programInfo, undefined, true);  // useTexturedCube = true
+
+    // Setup roads (gray ground with texture)
     // Escala 0.5 porque el cubo base tiene 2 unidades (de -1 a 1) y las celdas son de 1 unidad
     for (const road of roads) {
-        road.arrays = baseCube.arrays;
-        road.bufferInfo = baseCube.bufferInfo;
-        road.vao = baseCube.vao;
+        // Usar cubo texturizado si hay textura, sino cubo normal
+        if (roadTexture) {
+            road.arrays = texturedCube.arrays;
+            road.bufferInfo = texturedCube.bufferInfo;
+            road.vao = texturedCube.vao;
+            road.color = [1.0, 1.0, 1.0, 1.0];  // White (texture will show through)
+            road.texture = roadTexture;
+        } else {
+            road.arrays = baseCube.arrays;
+            road.bufferInfo = baseCube.bufferInfo;
+            road.vao = baseCube.vao;
+            road.color = [0.3, 0.3, 0.3, 1.0];  // Gray fallback
+        }
         road.scale = { x: 0.5, y: 0.025, z: 0.5 };
-        road.color = [0.3, 0.3, 0.3, 1.0];  // Gray
         scene.addObject(road);
     }
 
@@ -490,7 +652,14 @@ function setupObjects(scene, gl, programInfo) {
             // Offset upward to show floor beneath
             obstacle.position.y += 0.75;
         }
-        obstacle.color = [0.6, 0.6, 0.7, 1.0];  // Light gray/blue
+        // Asignar textura variada si hay texturas disponibles (patron de buildingModelRefs)
+        if (buildingTextures.length > 0) {
+            const textureIndex = i % buildingTextures.length;
+            obstacle.color = [1.0, 1.0, 1.0, 1.0];  // White (texture will show through)
+            obstacle.texture = buildingTextures[textureIndex];
+        } else {
+            obstacle.color = [0.6, 0.6, 0.7, 1.0];  // Light gray/blue fallback
+        }
         scene.addObject(obstacle);
     }
 
@@ -560,8 +729,10 @@ function setupObjects(scene, gl, programInfo) {
         }
 
         // Guardar posicion inicial para interpolacion
-        car.startPos = { x: car.position.x, y: car.position.y, z: car.position.z };
-        car.targetPos = { x: car.position.x, y: car.position.y, z: car.position.z };
+        // Fijar Y a 0.1 para que los coches esten sobre el suelo
+        car.position.y = 0.1;
+        car.startPos = { x: car.position.x, y: 0.1, z: car.position.z };
+        car.targetPos = { x: car.position.x, y: 0.1, z: car.position.z };
 
         scene.addObject(car);
     }
@@ -571,6 +742,13 @@ function setupObjects(scene, gl, programInfo) {
 // Maximo 30 semaforos segun el shader
 const MAX_TRAFFIC_LIGHTS = 30;
 const MAX_CARS = 50;
+const MAX_BUILDING_LIGHTS = 80;
+
+// Colores aleatorios para luces de edificios (generados una vez)
+let buildingLightColors = [];
+
+// Indices aleatorios de edificios iluminados (generados una vez)
+let illuminatedBuildingIndices = [];
 
 function getTrafficLightUniforms() {
     const positions = [];
@@ -626,6 +804,99 @@ function getCarUniforms(fract) {
     };
 }
 
+// Preparar arrays de posiciones y colores de edificios para el shader
+// Patron de getTrafficLightUniforms
+function getBuildingLightUniforms() {
+    const positions = [];
+    const colors = [];
+    const numLights = Math.min(obstacles.length, MAX_BUILDING_LIGHTS);
+
+    // Generar indices aleatorios de edificios iluminados una sola vez
+    // Esto distribuye las luces por toda la ciudad en lugar de solo los primeros N
+    if (illuminatedBuildingIndices.length === 0 && obstacles.length > 0) {
+        // Crear array con todos los indices de edificios
+        const allIndices = [];
+        for (let i = 0; i < obstacles.length; i++) {
+            allIndices.push(i);
+        }
+        // Mezclar aleatoriamente (Fisher-Yates shuffle)
+        for (let i = allIndices.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            const temp = allIndices[i];
+            allIndices[i] = allIndices[j];
+            allIndices[j] = temp;
+        }
+        // Tomar los primeros MAX_BUILDING_LIGHTS indices
+        for (let i = 0; i < Math.min(allIndices.length, MAX_BUILDING_LIGHTS); i++) {
+            illuminatedBuildingIndices.push(allIndices[i]);
+        }
+    }
+
+    // Generar colores aleatorios una sola vez
+    // Colores neon cyberpunk MUY brillantes y saturados
+    if (buildingLightColors.length === 0) {
+        for (let i = 0; i < MAX_BUILDING_LIGHTS; i++) {
+            // Colores neon cyberpunk MAXIMOS - valores 2.0+ para oversaturation
+            const colorType = Math.floor(Math.random() * 10);
+            let r, g, b;
+            if (colorType === 0) {
+                // Rosa neon INTENSO (hot pink)
+                r = 2.0; g = 0.0; b = 2.0;
+            } else if (colorType === 1) {
+                // Morado neon MUY brillante
+                r = 1.5; g = 0.0; b = 2.0;
+            } else if (colorType === 2) {
+                // Azul electrico MAXIMO
+                r = 0.0; g = 0.5; b = 2.0;
+            } else if (colorType === 3) {
+                // Cyan neon BRILLANTE
+                r = 0.0; g = 2.0; b = 2.0;
+            } else if (colorType === 4) {
+                // Verde neon INTENSO
+                r = 0.0; g = 2.0; b = 0.3;
+            } else if (colorType === 5) {
+                // Amarillo neon MUY brillante
+                r = 2.0; g = 2.0; b = 0.0;
+            } else if (colorType === 6) {
+                // Naranja neon INTENSO
+                r = 2.0; g = 0.5; b = 0.0;
+            } else if (colorType === 7) {
+                // Rojo neon MUY brillante
+                r = 2.0; g = 0.0; b = 0.3;
+            } else if (colorType === 8) {
+                // Magenta neon INTENSO
+                r = 2.0; g = 0.0; b = 1.0;
+            } else {
+                // Azul neon PROFUNDO
+                r = 0.3; g = 0.0; b = 2.0;
+            }
+            buildingLightColors.push([r, g, b, 1.0]);
+        }
+    }
+
+    for (let i = 0; i < MAX_BUILDING_LIGHTS; i++) {
+        if (i < illuminatedBuildingIndices.length) {
+            // Usar indice aleatorio en lugar de secuencial
+            const buildingIndex = illuminatedBuildingIndices[i];
+            const building = obstacles[buildingIndex];
+            // Posicion de la luz en el centro del edificio, un poco elevada
+            positions.push(building.position.x, building.position.y + 1.0, building.position.z);
+            const color = buildingLightColors[i];
+            colors.push(color[0], color[1], color[2], color[3]);
+        } else {
+            // Llenar con posiciones lejanas y colores nulos
+            positions.push(1000.0, 1000.0, 1000.0);
+            colors.push(0, 0, 0, 0);
+        }
+    }
+
+    return {
+        u_buildingLightPositions: positions,
+        u_buildingLightColors: colors,
+        u_numBuildingLights: numLights
+    };
+}
+
 // Convertir direccion del coche a angulo de rotacion
 function getRotationFromDirection(direction) {
     // Ajustar rotacion segun la direccion
@@ -675,9 +946,10 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
     // Necesaria para que la iluminacion funcione correctamente
     const normalMat = M4.transpose(M4.inverse(object.matrix));
 
-    // Obtener uniforms de luces de semaforos y coches
+    // Obtener uniforms de luces de semaforos, coches y edificios
     const trafficLightUniforms = getTrafficLightUniforms();
     const carUniforms = getCarUniforms(fract);
+    const buildingLightUniforms = getBuildingLightUniforms();
 
     // Uniforms del modelo para el shader de Phong
     // Estos valores se pasan al shader para calcular la iluminacion
@@ -695,7 +967,8 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
         u_useTexture: object.texture ? true : false,
         u_isSkybox: object.isSkybox ? true : false,
         ...trafficLightUniforms,
-        ...carUniforms
+        ...carUniforms,
+        ...buildingLightUniforms
     };
 
     if (object.texture) {
@@ -720,8 +993,44 @@ function drawCar(gl, programInfo, car, viewProjectionMatrix, fract) {
     }
 
     // Actualizar rotacion del coche segun su direccion de movimiento
+    // Usar interpolacion suave para evitar twitch visual
     if (car.direction) {
-        car.rotRad.y = getRotationFromDirection(car.direction);
+        const targetRotation = getRotationFromDirection(car.direction);
+
+        // Inicializar rotacion previa y estable si no existen
+        if (car.prevRotation === undefined) {
+            car.prevRotation = targetRotation;
+            car.stableRotation = targetRotation;
+            car.rotationHoldFrames = 0;
+        }
+
+        // Calcular diferencia con la rotacion estable
+        let diff = targetRotation - car.stableRotation;
+
+        // Manejar el wrap-around de angulos (ej: de 270 a 0 grados)
+        if (diff > Math.PI) diff -= 2 * Math.PI;
+        if (diff < -Math.PI) diff += 2 * Math.PI;
+
+        // Si hay un cambio significativo de direccion, esperar varios frames antes de aplicarlo
+        // Esto evita el twitch causado por cambios de 1 frame
+        if (Math.abs(diff) > 0.1) {
+            car.rotationHoldFrames++;
+            // Solo actualizar la rotacion estable si el cambio persiste por 5+ frames
+            if (car.rotationHoldFrames > 5) {
+                car.stableRotation = targetRotation;
+                car.rotationHoldFrames = 0;
+            }
+        } else {
+            car.rotationHoldFrames = 0;
+        }
+
+        // Interpolar suavemente hacia la rotacion estable (factor bajo para suavidad)
+        let stableDiff = car.stableRotation - car.prevRotation;
+        if (stableDiff > Math.PI) stableDiff -= 2 * Math.PI;
+        if (stableDiff < -Math.PI) stableDiff += 2 * Math.PI;
+
+        car.prevRotation = car.prevRotation + stableDiff * 0.08;
+        car.rotRad.y = car.prevRotation;
     }
 
     // Si es drunk driver y crasheó, actualizar color a rojo
@@ -832,16 +1141,21 @@ async function drawScene() {
             window.carIdController = cameraFolder.add(window.cameraControls, 'carId', dropdownOptions)
                 .name('Drunk Driver ID')
                 .onChange((carId) => {
+                    scene.camera.followInitialized = false; // Resetear para nueva vista
                     if (carId === 'None') {
-                        scene.camera.followTarget = null;
-                        scene.camera.followMode = false;
+                        // Restaurar camara a posicion inicial
+                        restoreCameraToInitial();
                         window.cameraControls.followMode = false;
+                        hideNewsOverlay();
+                        updateGUIControllers();
                     } else {
                         const car = cars.find(c => c.id === carId);
                         if (car) {
                             scene.camera.followTarget = car;
                             scene.camera.followMode = true;
                             window.cameraControls.followMode = true;
+                            showNewsOverlay();
+                            updateGUIControllers();
                         }
                     }
                 });
@@ -888,8 +1202,10 @@ async function drawScene() {
             }
 
             // Inicializar posiciones para interpolacion
-            car.startPos = { x: car.position.x, y: car.position.y, z: car.position.z };
-            car.targetPos = { x: car.position.x, y: car.position.y, z: car.position.z };
+            // Fijar Y a 0.1 para que los coches esten sobre el suelo
+            car.position.y = 0.1;
+            car.startPos = { x: car.position.x, y: 0.1, z: car.position.z };
+            car.targetPos = { x: car.position.x, y: 0.1, z: car.position.z };
 
             scene.addObject(car);
         }
@@ -923,14 +1239,9 @@ async function drawScene() {
             scene.objects.splice(index, 1);
         }
 
-        // Si el carro que se está siguiendo fue eliminado, detener follow mode
+        // Si el carro que se está siguiendo fue eliminado (despawneó), cambiar a otro drunk driver
         if (scene.camera.followTarget === obj) {
-            scene.camera.followTarget = null;
-            scene.camera.followMode = false;
-            if (window.cameraControls) {
-                window.cameraControls.followMode = false;
-                window.cameraControls.carId = 'None';
-            }
+            switchToAnotherDrunkDriver();
         }
     }
 
@@ -950,11 +1261,13 @@ async function drawScene() {
         await update();
 
         // Actualizar targetPos con las nuevas posiciones del servidor
+        // Fijar Y a 0.1 para que los coches esten sobre el suelo
         for (const car of cars) {
+            car.position.y = 0.1;
             if (!car.startPos) {
-                car.startPos = { x: car.position.x, y: car.position.y, z: car.position.z };
+                car.startPos = { x: car.position.x, y: 0.1, z: car.position.z };
             }
-            car.targetPos = { x: car.position.x, y: car.position.y, z: car.position.z };
+            car.targetPos = { x: car.position.x, y: 0.1, z: car.position.z };
         }
     }
 
@@ -986,6 +1299,9 @@ function setupUI() {
     // Patrón de CG-2025.base_lighting.setupUI()
     const gui = new GUI();
 
+    // Guardar referencia global para actualizar controladores
+    window.gui = gui;
+
     // Settings for the light
     const lightFolder = gui.addFolder('Light:')
     lightFolder.add(scene.lights[0].position, 'x', -30, 30)
@@ -1013,20 +1329,44 @@ function setupUI() {
     cameraFolder.add(cameraControls, 'followMode')
         .name('Follow Mode')
         .onChange((value) => {
-            scene.camera.followMode = value;
-            if (!value) {
-                scene.camera.followTarget = null;
+            scene.camera.followInitialized = false; // Resetear para nueva vista
+            if (value) {
+                // Seleccionar automaticamente el primer drunk driver disponible
+                const drunkDriver = getFirstAvailableDrunkDriver();
+                if (drunkDriver) {
+                    scene.camera.followMode = true;
+                    scene.camera.followTarget = drunkDriver;
+                    cameraControls.carId = drunkDriver.id;
+                    showNewsOverlay();
+                    updateGUIControllers();
+                } else {
+                    // No hay drunk drivers disponibles
+                    scene.camera.followMode = false;
+                    cameraControls.followMode = false;
+                    scene.camera.followTarget = null;
+                    hideNewsOverlay();
+                    updateGUIControllers();
+                }
+            } else {
+                // Restaurar camara a posicion inicial
+                restoreCameraToInitial();
+                cameraControls.carId = 'None';
+                hideNewsOverlay();
+                updateGUIControllers();
             }
         });
 
     // Dropdown para seleccionar coche (se actualizara dinamicamente)
     const carIdController = cameraFolder.add(cameraControls, 'carId', ['None'])
-        .name('Car ID')
+        .name('Drunk Driver ID')
         .onChange((carId) => {
+            scene.camera.followInitialized = false; // Resetear para nueva vista
             if (carId === 'None') {
-                scene.camera.followTarget = null;
-                scene.camera.followMode = false;
+                // Restaurar camara a posicion inicial
+                restoreCameraToInitial();
                 cameraControls.followMode = false;
+                hideNewsOverlay();
+                updateGUIControllers();
             } else {
                 // Buscar el coche por ID
                 const car = cars.find(c => c.id === carId);
@@ -1034,6 +1374,8 @@ function setupUI() {
                     scene.camera.followTarget = car;
                     scene.camera.followMode = true;
                     cameraControls.followMode = true;
+                    showNewsOverlay();
+                    updateGUIControllers();
                 }
             }
         });

@@ -31,7 +31,7 @@ function loadObj(objString) {
             numComponents: 3,
             data: [ ]
         },
-        a_texCoord: {
+        a_texcoord: {
             numComponents: 2,
             data: [ ]
         }
@@ -149,9 +149,12 @@ function loadObj(objString) {
 
                     // Coordenadas de textura
                     if (v.vtIndex >= 0 && texCoords[v.vtIndex]) {
-                        arrays.a_texCoord.data.push(...texCoords[v.vtIndex]);
+                        arrays.a_texcoord.data.push(...texCoords[v.vtIndex]);
                     } else {
-                        arrays.a_texCoord.data.push(0, 0);
+                        // Generar coordenadas de textura automaticas (planar mapping)
+                        // Usa la posicion X y Y del vertice como coordenadas UV
+                        const pos = vertices[v.vIndex];
+                        arrays.a_texcoord.data.push(pos[0], pos[1]);
                     }
 
                     // Color por defecto blanco que sera reemplazado por el color del material
