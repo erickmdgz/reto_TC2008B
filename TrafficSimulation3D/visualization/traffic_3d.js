@@ -19,7 +19,9 @@ import { Camera3D } from './libs/camera3d';
 import {
     cars, trafficLights, obstacles, roads, destinations,
     initTrafficModel, update, getCars, getTrafficLights,
-    getObstacles, getRoads, getDestinations, setSpawnInterval
+    getObstacles, getRoads, getDestinations, setSpawnInterval,
+    normalCarParams, updateNormalParams,
+    drunkDriverParams, updateDrunkParams
 } from './libs/api_connection.js';
 
 // Define the shader code, using GLSL 3.00
@@ -159,12 +161,12 @@ async function loadDrunkDriverModel(gl, programInfo) {
 
         const objText = await response.text();
 
-        console.log('🚗 Drunk driver model loaded, size:', objText.length, 'characters');
+        console.log('Drunk driver model loaded, size:', objText.length, 'characters');
 
         drunkDriverModelRef = new Object3D(-50);
         drunkDriverModelRef.prepareVAO(gl, programInfo, objText);
 
-        console.log('🔍 BEFORE TRANSFORMATION:');
+        console.log('BEFORE TRANSFORMATION:');
         console.log('  - Arrays exist:', !!drunkDriverModelRef.arrays);
         console.log('  - Position data exists:', !!drunkDriverModelRef.arrays.a_position);
         console.log('  - Position data length:', drunkDriverModelRef.arrays.a_position?.data?.length);
@@ -253,15 +255,15 @@ async function loadDrunkDriverModel(gl, programInfo) {
             drunkDriverModelRef.bufferInfo = twgl.createBufferInfoFromArrays(gl, drunkDriverModelRef.arrays);
             drunkDriverModelRef.vao = twgl.createVAOFromBufferInfo(gl, programInfo, drunkDriverModelRef.bufferInfo);
 
-            console.log('🔧 AFTER TRANSFORMATION:');
+            console.log('AFTER TRANSFORMATION:');
             console.log('  - First 10 transformed vertices:', drunkDriverModelRef.arrays.a_position?.data?.slice(0, 30));
             console.log('  - BufferInfo recreated:', !!drunkDriverModelRef.bufferInfo);
             console.log('  - VAO recreated:', !!drunkDriverModelRef.vao);
         } else {
-            console.error('❌ TRANSFORMATION FAILED: Arrays not accessible');
+            console.error('TRANSFORMATION FAILED: Arrays not accessible');
         }
 
-        console.log('✅ Drunk driver model loaded and transformed successfully');
+        console.log('Drunk driver model loaded and transformed successfully');
     } catch (error) {
         console.error('Error loading drunk driver model:', error);
         console.log('Using cube model as fallback for drunk drivers');
@@ -531,7 +533,7 @@ function setupObjects(scene, gl, programInfo) {
     for (const car of cars) {
         // Usar drunk driver model para drunk drivers, modelo normal para coches normales
         if (car.type === 'drunk' && drunkDriverModelRef) {
-            console.log('🍺 Assigning drunk driver model to car:', car.id);
+            console.log('Assigning drunk driver model to car:', car.id);
             console.log('  - Using drunkDriverModelRef with', drunkDriverModelRef.arrays.a_position?.data?.length / 3, 'vertices');
             console.log('  - First 10 vertices from ref:', drunkDriverModelRef.arrays.a_position?.data?.slice(0, 30));
             car.arrays = drunkDriverModelRef.arrays;
@@ -861,7 +863,7 @@ async function drawScene() {
         if (!scene.objects.includes(car)) {
             // Usar drunk driver model para drunk drivers, modelo normal para coches normales
             if (car.type === 'drunk' && drunkDriverModelRef) {
-                console.log('🍺 [DYNAMIC] Assigning drunk driver model to new car:', car.id);
+                console.log('[DYNAMIC] Assigning drunk driver model to new car:', car.id);
                 car.arrays = drunkDriverModelRef.arrays;
                 car.bufferInfo = drunkDriverModelRef.bufferInfo;
                 car.vao = drunkDriverModelRef.vao;
@@ -1043,7 +1045,7 @@ function setupUI() {
             scene.camera.followDistance = value;
         });
 
-    // Simulation speed controls
+    // === SIMULATION (general) ===
     const simulationFolder = gui.addFolder('Simulation:')
 
     // Objeto para controlar velocidad de simulacion
@@ -1066,6 +1068,54 @@ function setupUI() {
         .name('Spawn Interval')
         .onChange((value) => {
             setSpawnInterval(value);
+        });
+
+    // === NORMAL CARS ===
+    const normalFolder = gui.addFolder('Normal Cars:')
+
+    normalFolder.add(normalCarParams, 'normal_spawn_ratio', 0, 1)
+        .name('Spawn Ratio')
+        .step(0.05)
+        .onChange((value) => {
+            updateNormalParams({ normal_spawn_ratio: value });
+        });
+
+    normalFolder.add(normalCarParams, 'normal_crash_prob', 0, 1)
+        .name('Crash Prob')
+        .step(0.05)
+        .onChange((value) => {
+            updateNormalParams({ normal_crash_prob: value });
+        });
+
+    // === DRUNK DRIVERS ===
+    const drunkFolder = gui.addFolder('Drunk Drivers:')
+
+    drunkFolder.add(drunkDriverParams, 'drunk_crash_prob', 0, 1)
+        .name('Crash Prob')
+        .step(0.05)
+        .onChange((value) => {
+            updateDrunkParams({ drunk_crash_prob: value });
+        });
+
+    drunkFolder.add(drunkDriverParams, 'drunk_ignore_light_prob', 0, 1)
+        .name('Ignore Lights')
+        .step(0.05)
+        .onChange((value) => {
+            updateDrunkParams({ drunk_ignore_light_prob: value });
+        });
+
+    drunkFolder.add(drunkDriverParams, 'drunk_forget_route_prob', 0, 1)
+        .name('Forget Route')
+        .step(0.05)
+        .onChange((value) => {
+            updateDrunkParams({ drunk_forget_route_prob: value });
+        });
+
+    drunkFolder.add(drunkDriverParams, 'drunk_zigzag_intensity', 0, 1)
+        .name('Zigzag')
+        .step(0.05)
+        .onChange((value) => {
+            updateDrunkParams({ drunk_zigzag_intensity: value });
         });
 
     // Guardar referencia para actualizar el dropdown

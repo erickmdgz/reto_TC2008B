@@ -19,6 +19,20 @@ const obstacles = [];
 const roads = [];
 const destinations = [];
 
+// Parámetros globales de coches normales
+const normalCarParams = {
+    normal_spawn_ratio: 0.75,
+    normal_crash_prob: 0.0
+};
+
+// Parámetros globales de drunk driver
+const drunkDriverParams = {
+    drunk_crash_prob: 0.5,
+    drunk_ignore_light_prob: 0.3,
+    drunk_forget_route_prob: 0.15,
+    drunk_zigzag_intensity: 0.0
+};
+
 /* FUNCTIONS FOR THE INTERACTION WITH THE MESA SERVER */
 
 /*
@@ -30,7 +44,7 @@ async function initTrafficModel() {
         let response = await fetch(agent_server_uri + "init", {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({})
+            body: JSON.stringify({...normalCarParams, ...drunkDriverParams})
         });
 
         // Check if the response was successful
@@ -39,6 +53,46 @@ async function initTrafficModel() {
             console.log(result.message);
         }
 
+    } catch (error) {
+        console.log(error);
+    }
+}
+
+/*
+ * Updates normal car parameters on the server.
+ */
+async function updateNormalParams(params) {
+    try {
+        let response = await fetch(agent_server_uri + "updateNormalParams", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(params)
+        });
+
+        if (response.ok) {
+            let result = await response.json();
+            console.log(result.message);
+        }
+    } catch (error) {
+        console.log(error);
+    }
+}
+
+/*
+ * Updates drunk driver parameters on the server.
+ */
+async function updateDrunkParams(params) {
+    try {
+        let response = await fetch(agent_server_uri + "updateDrunkParams", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(params)
+        });
+
+        if (response.ok) {
+            let result = await response.json();
+            console.log(result.message);
+        }
     } catch (error) {
         console.log(error);
     }
@@ -249,5 +303,7 @@ async function setSpawnInterval(spawnInterval) {
 export {
     cars, trafficLights, obstacles, roads, destinations,
     initTrafficModel, update, getCars, getTrafficLights,
-    getObstacles, getRoads, getDestinations, setSpawnInterval
+    getObstacles, getRoads, getDestinations, setSpawnInterval,
+    normalCarParams, updateNormalParams,
+    drunkDriverParams, updateDrunkParams
 };

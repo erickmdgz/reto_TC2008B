@@ -29,14 +29,32 @@ def initModel():
     if request.method == 'POST':
         currentStep = 0
 
-        # Get spawn_interval from request body if provided
+        # Get parameters from request body
         data = request.get_json() or {}
         spawn_interval = data.get('spawn_interval', 10)
 
+        # Parámetros de coches normales
+        normal_spawn_ratio = data.get('normal_spawn_ratio', 0.75)
+        normal_crash_prob = data.get('normal_crash_prob', 0.0)
+
+        # Parámetros de drunk drivers
+        drunk_crash_prob = data.get('drunk_crash_prob', 0.5)
+        drunk_ignore_light_prob = data.get('drunk_ignore_light_prob', 0.3)
+        drunk_forget_route_prob = data.get('drunk_forget_route_prob', 0.15)
+        drunk_zigzag_intensity = data.get('drunk_zigzag_intensity', 0.0)
+
         print(f"Initializing traffic model with spawn_interval={spawn_interval}...")
 
-        # Create the model with spawn_interval parameter
-        trafficModel = CityModel(spawn_interval=spawn_interval)
+        # Create the model with all parameters
+        trafficModel = CityModel(
+            spawn_interval=spawn_interval,
+            normal_spawn_ratio=normal_spawn_ratio,
+            normal_crash_prob=normal_crash_prob,
+            drunk_crash_prob=drunk_crash_prob,
+            drunk_ignore_light_prob=drunk_ignore_light_prob,
+            drunk_forget_route_prob=drunk_forget_route_prob,
+            drunk_zigzag_intensity=drunk_zigzag_intensity
+        )
 
         # Return success message
         return jsonify({
@@ -87,7 +105,7 @@ def getCars():
                 "waiting": car.waiting_at_light,
                 "direction": direction_map.get(car.direction, "Norte"),
                 "type": "drunk" if isinstance(car, drunkDriver) else "normal",
-                "crashed": car.crashed if isinstance(car, drunkDriver) else False
+                "crashed": car.crashed
             }
             for car in trafficModel.cars
         ]
@@ -189,15 +207,69 @@ def updateModel():
     global currentStep, trafficModel
 
     if request.method == 'GET':
-        # Update the model
-        trafficModel.step()
-        currentStep += 1
+        if trafficModel is None:
+            return jsonify({"error": "Model not initialized. Call /init first."}), 400
 
-        return jsonify({
-            'message': f'Model updated to step {currentStep}.',
-            'currentStep': currentStep,
-            'running': trafficModel.running
-        })
+        try:
+            # Update the model
+            trafficModel.step()
+            currentStep += 1
+
+            return jsonify({
+                'message': f'Model updated to step {currentStep}.',
+                'currentStep': currentStep,
+                'running': trafficModel.running
+            })
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({"error": str(e)}), 500
+
+# Route to update drunk driver parameters during simulation
+@app.route('/updateDrunkParams', methods=['POST'])
+def updateDrunkParams():
+    global trafficModel
+
+    if request.method == 'POST':
+        data = request.get_json() or {}
+
+        if 'drunk_crash_prob' in data:
+            trafficModel.drunk_crash_prob = data['drunk_crash_prob']
+        if 'drunk_ignore_light_prob' in data:
+            trafficModel.drunk_ignore_light_prob = data['drunk_ignore_light_prob']
+        if 'drunk_forget_route_prob' in data:
+            trafficModel.drunk_forget_route_prob = data['drunk_forget_route_prob']
+        if 'drunk_zigzag_intensity' in data:
+            trafficModel.drunk_zigzag_intensity = data['drunk_zigzag_intensity']
+
+        # Actualizar drunk drivers existentes
+        for car in trafficModel.cars:
+            if isinstance(car, drunkDriver):
+                car.crash_prob = trafficModel.drunk_crash_prob
+                car.ignore_light_prob = trafficModel.drunk_ignore_light_prob
+                car.forget_route_prob = trafficModel.drunk_forget_route_prob
+                car.zigzag_intensity = trafficModel.drunk_zigzag_intensity
+
+        return jsonify({"message": "Drunk driver parameters updated."})
+
+# Route to update normal car parameters during simulation
+@app.route('/updateNormalParams', methods=['POST'])
+def updateNormalParams():
+    global trafficModel
+
+    if request.method == 'POST':
+        data = request.get_json() or {}
+
+        if 'normal_spawn_ratio' in data:
+            trafficModel.normal_spawn_ratio = data['normal_spawn_ratio']
+        if 'normal_crash_prob' in data:
+            trafficModel.normal_crash_prob = data['normal_crash_prob']
+            # Actualizar coches normales existentes
+            for car in trafficModel.cars:
+                if not isinstance(car, drunkDriver):
+                    car.crash_prob = trafficModel.normal_crash_prob
+
+        return jsonify({"message": "Normal car parameters updated."})
 
 if __name__ == '__main__':
     # Run the flask server
