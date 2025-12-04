@@ -13,6 +13,7 @@ in vec3 v_surfaceToLight;
 in vec3 v_surfaceToView;
 in vec4 v_color;
 in vec3 v_worldPosition;
+in vec2 v_texcoord;
 
 // Scene uniforms
 uniform vec4 u_lightAmbient;
@@ -22,6 +23,9 @@ uniform vec4 u_lightSpecular;
 // Model uniforms
 uniform vec4 u_materialColor;
 uniform float u_materialShininess;
+uniform sampler2D u_texture;
+uniform bool u_useTexture;
+uniform bool u_isSkybox;
 
 // Traffic light uniforms
 uniform vec3 u_trafficLightPositions[MAX_TRAFFIC_LIGHTS];
@@ -35,6 +39,16 @@ uniform int u_numCars;
 out vec4 outColor;
 
 void main() {
+    // Get base color from texture or material color
+    vec4 baseColor = u_useTexture ? texture(u_texture, v_texcoord) : u_materialColor;
+
+    // If it's a skybox, just return the texture with full brightness (no lighting)
+    // Multiply by material color to apply tint
+    if (u_isSkybox && u_useTexture) {
+        outColor = baseColor * u_materialColor;
+        return;
+    }
+
     // Normalize vectors
     vec3 normal = normalize(v_normal);
     vec3 surfaceToLightDirection = normalize(v_surfaceToLight);
@@ -44,11 +58,11 @@ void main() {
     vec3 halfVector = normalize(surfaceToLightDirection + surfaceToViewDirection);
 
     // Ambient component
-    vec4 ambient = u_lightAmbient * u_materialColor;
+    vec4 ambient = u_lightAmbient * baseColor;
 
     // Diffuse component
     float diffuseLight = max(dot(normal, surfaceToLightDirection), 0.0);
-    vec4 diffuse = u_lightDiffuse * u_materialColor * diffuseLight;
+    vec4 diffuse = u_lightDiffuse * baseColor * diffuseLight;
 
     // Specular component
     float specularLight = 0.0;
@@ -75,7 +89,7 @@ void main() {
 
         // Contribucion de esta luz de semaforo (intensidad reducida)
         vec4 lightColor = u_trafficLightColors[i];
-        trafficLightContribution += lightColor * u_materialColor * diff * attenuation * 0.3;
+        trafficLightContribution += lightColor * baseColor * diff * attenuation * 0.3;
     }
 
     // Calcular contribucion de luces de coches (luz blanca suave)
@@ -99,7 +113,7 @@ void main() {
 
         // Contribucion de esta luz de coche
         // Mismo patron que semaforos
-        carLightContribution += carLightColor * u_materialColor * carDiff * carAttenuation * 0.8;
+        carLightContribution += carLightColor * baseColor * carDiff * carAttenuation * 0.8;
     }
 
     // Final color: iluminacion principal + luces de semaforos + luces de coches

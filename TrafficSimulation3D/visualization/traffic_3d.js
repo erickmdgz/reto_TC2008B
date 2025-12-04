@@ -60,6 +60,9 @@ let trafficLightModelRef = null;
 // Test car reference para animarlo
 let testCarRef = null;
 
+// Skybox references (multiple walls)
+let skyboxWalls = [];
+
 // Main function is async to make API requests
 async function main() {
     // Setup the canvas area
@@ -97,6 +100,9 @@ async function main() {
 
     // Load traffic light model
     await loadTrafficLightModel(gl, emissionProgramInfo);
+
+    // Load skybox
+    await loadSkybox(gl, phongProgramInfo);
 
     // Initialize the scene
     setupScene();
@@ -339,6 +345,74 @@ async function loadTrafficLightModel(gl, programInfo) {
         console.error('Error cargando modelo de semaforo:', error);
         console.log('Usando modelo de cubo como alternativa');
         // Si falla la carga trafficLightModelRef quedara null y los semaforos usaran cubos
+    }
+}
+
+// Load skybox as 6 walls forming a cube room
+async function loadSkybox(gl, programInfo) {
+    try {
+        // Load Manhattan texture
+        const img = await new Promise((resolve, reject) => {
+            const image = new Image();
+            image.onload = () => resolve(image);
+            image.onerror = reject;
+            image.src = '/midtown-de-manhattan-de-nueva-york-en-la-oscuridad.jpg';
+        });
+
+        const manhattanTexture = twgl.createTexture(gl, {
+            src: img,
+            wrap: gl.CLAMP_TO_EDGE,
+            min: gl.LINEAR,
+            mag: gl.LINEAR
+        });
+
+        // Load aerial view for floor
+        const aerialImg = await new Promise((resolve, reject) => {
+            const image = new Image();
+            image.onload = () => resolve(image);
+            image.onerror = reject;
+            image.src = '/top-down-aerial-view-textured-footage-135944431_iconl.jpeg';
+        });
+
+        const aerialTexture = twgl.createTexture(gl, {
+            src: aerialImg,
+            wrap: gl.REPEAT,
+            min: gl.LINEAR,
+            mag: gl.LINEAR
+        });
+
+        const size = 200;
+        const center = [15, 15, 15];
+        const distance = 100;
+
+        // Store all skybox walls with texture (cube approach)
+        const walls = [
+            // Back wall (North - positive Z) - darker
+            { id: -991, pos: [center[0], center[1], center[2] + distance], rot: [0, 0, 0], texture: manhattanTexture, color: [0.6, 0.6, 0.7, 1] },
+            // Front wall (South - negative Z) - darker
+            { id: -992, pos: [center[0], center[1], center[2] - distance], rot: [0, 0, 0], texture: manhattanTexture, color: [0.6, 0.6, 0.7, 1] },
+            // Left wall (West - negative X) - darker
+            { id: -993, pos: [center[0] - distance, center[1], center[2]], rot: [0, 90, 0], texture: manhattanTexture, color: [0.6, 0.6, 0.7, 1] },
+            // Right wall (East - positive X) - darker
+            { id: -994, pos: [center[0] + distance, center[1], center[2]], rot: [0, 90, 0], texture: manhattanTexture, color: [0.6, 0.6, 0.7, 1] },
+            // Top wall (ceiling) - darker
+            { id: -995, pos: [center[0], center[1] + distance, center[2]], rot: [90, 0, 0], texture: manhattanTexture, color: [0.6, 0.6, 0.7, 1] },
+            // Bottom wall (floor) - aerial view with dark blue/purple tint
+            { id: -996, pos: [center[0], center[1] - distance, center[2]], rot: [90, 0, 0], texture: aerialTexture, color: [0.3, 0.2, 0.4, 1] }
+        ];
+
+        for (const wallData of walls) {
+            const wall = new Object3D(wallData.id, wallData.pos, wallData.rot, [size, size, 1], wallData.color);
+            wall.prepareVAO(gl, programInfo, undefined, true);
+            wall.shininess = 0;
+            wall.texture = wallData.texture;
+            wall.isSkybox = true;
+            skyboxWalls.push(wall);
+        }
+
+        console.log('Skybox loaded successfully with', skyboxWalls.length, 'walls');
+    } catch (error) {
+        console.error('Error loading skybox:', error);
     }
 }
 
@@ -631,9 +705,16 @@ function drawObject(gl, programInfo, object, viewProjectionMatrix, fract) {
         u_lightDiffuse: scene.lights[0].diffuse,
         u_lightSpecular: scene.lights[0].specular,
         u_viewPosition: scene.camera.posArray,
+        u_useTexture: object.texture ? true : false,
+        u_isSkybox: object.isSkybox ? true : false,
         ...trafficLightUniforms,
         ...carUniforms
+    };
+
+    if (object.texture) {
+        objectUniforms.u_texture = object.texture;
     }
+
     twgl.setUniforms(programInfo, objectUniforms);
 
     // Dibujar el objeto usando su VAO y buffer info
@@ -688,6 +769,14 @@ async function drawScene() {
     scene.camera.updateFollowMode();
     scene.camera.checkKeys();
     const viewProjectionMatrix = setupViewProjection(gl);
+
+    // Draw skybox walls first (cube room around the scene)
+    if (skyboxWalls.length > 0) {
+        gl.useProgram(phongProgramInfo.program);
+        for (const wall of skyboxWalls) {
+            drawObject(gl, phongProgramInfo, wall, viewProjectionMatrix, 0);
+        }
+    }
 
     gl.useProgram(phongProgramInfo.program);
 

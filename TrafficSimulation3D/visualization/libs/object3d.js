@@ -8,7 +8,7 @@
 import * as twgl from 'twgl.js';
 
 import { M4 } from '../libs/3d-lib';
-import { cubeFaceColors } from '../libs/shapes';
+import { cubeFaceColors, cubeTextured } from '../libs/shapes';
 import { loadObj } from '../libs/obj_loader';
 
 class Object3D {
@@ -72,10 +72,10 @@ class Object3D {
     }
 
     // Set up the WebGL components for an object
-    prepareVAO(gl, programInfo, objData) {
+    prepareVAO(gl, programInfo, objData, useTexturedCube = false) {
         if (objData == undefined) {
             // Using a default cube
-            this.arrays = cubeFaceColors(1);
+            this.arrays = useTexturedCube ? cubeTextured(1) : cubeFaceColors(1);
         } else {
             // Or using an obj file
             this.arrays = loadObj(objData);

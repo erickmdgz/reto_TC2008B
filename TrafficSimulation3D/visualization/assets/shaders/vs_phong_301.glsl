@@ -6,6 +6,7 @@
 in vec4 a_position;
 in vec3 a_normal;
 in vec4 a_color;
+in vec2 a_texcoord;
 
 // Model uniforms
 uniform mat4 u_transforms;
@@ -22,6 +23,7 @@ out vec3 v_surfaceToLight;
 out vec3 v_surfaceToView;
 out vec4 v_color;
 out vec3 v_worldPosition;
+out vec2 v_texcoord;
 
 void main() {
     // Transform the position of the vertices
@@ -44,4 +46,7 @@ void main() {
 
     // Pass vertex color
     v_color = a_color;
+
+    // Pass texture coordinates
+    v_texcoord = a_texcoord;
 }
