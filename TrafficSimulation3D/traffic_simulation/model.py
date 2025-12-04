@@ -232,23 +232,28 @@ class CityModel(Model):
                 "attempt_number": int(self.spawn_interval)
             }
 
-            print(f"[API] Enviando datos: {data}")
+            url = self.api_url + endpoint
+            print(f"[API] Enviando a: {url}")
+            print(f"[API] Datos: {data}")
 
             headers = {
                 "Content-Type": "application/json"
             }
 
             response = requests.post(
-                self.api_url + endpoint,
+                url,
                 json=data,
                 headers=headers,
                 timeout=5
             )
 
             if response.status_code == 200:
-                print(f"[API] Step {self.steps_count}: Datos enviados exitosamente - Cars: {len(self.cars)}, Arrived: {self.cars_reached_destination}")
+                print(f"[API] Step {self.steps_count}: Datos enviados exitosamente")
+                print(f"[API] Server response: {response.json()}")
+                print(f"[API] Cars: {len(self.cars)}, Arrived: {self.cars_reached_destination}")
             else:
-                print(f"[API] Step {self.steps_count}: Error al enviar datos - Status: {response.status_code}, Response: {response.json()}")
+                print(f"[API] Step {self.steps_count}: Error al enviar datos - Status: {response.status_code}")
+                print(f"[API] Response: {response.json()}")
 
         except requests.exceptions.RequestException as e:
             print(f"[API] Step {self.steps_count}: Error de conexión - {str(e)}")

@@ -45,9 +45,9 @@ def initModel():
 
         # Parámetros de API
         api_url = data.get('api_url', 'http://10.49.12.39:5000/api/')
-        team_year = data.get('team_year', 2024)
+        team_year = data.get('team_year', 2025)
         team_classroom = data.get('team_classroom', 301)
-        team_name = data.get('team_name', 'equipo borracho')
+        team_name = data.get('team_name', 'Don July Seventy')
         enable_api = data.get('enable_api', True)
 
         print(f"Initializing traffic model with spawn_interval={spawn_interval}...")
